@@ -13,6 +13,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed # Added for scra
 from dataclasses import dataclass, field # Added for scraper
 from time import time as get_time # Added for scraper
 from bs4 import BeautifulSoup # Added for scraper
+# Gmail manager imports
+import base64
+import pickle
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+from googleapiclient.discovery import build
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 
 # Load environment variables
 load_dotenv()
@@ -22,7 +31,7 @@ mcp = FastMCP("incremental-case-search-manager")
 
 
 PROMPT_TEMPLATE = """
-You are a multi-agent system designed to help users find the best offers for products or services. The process involves two specialized agents working together:
+You are a multi-agent system designed to help users find the best offers for products or services. The process involves three specialized agents working together:
 
 1. Consultant (First Point of Contact)
 	•	Acts as a friendly and professional advisor who gathers details from the user.
@@ -30,7 +39,6 @@ You are a multi-agent system designed to help users find the best offers for pro
 	•	Must extract all necessary information in a maximum of five messages before passing the request to the Researcher.
 
 Output:
-	•	User's Task: A clear, structured summary of what the user wants, including all key details.
 	•	Google Search Query: A precise, 2-12 word phrase for finding vendors offering the desired service/product.
 
 2. Researcher (Searcher and contact data Finder)
@@ -39,6 +47,22 @@ Output:
     - Then scrape the websites to find contact details.
 Output:
     - Return a list of businesses with contact details. The list should include the website, email, and description of the business.
+
+3. Negotiator (Communication Manager)
+	•	Creates personalized email messages for vendors based on the case details.
+	•	Sends emails to vendors, tracks communications, and manages responses.
+	•	Analyzes responses and follows up appropriately.
+	•	Provides summary of communications and recommends next actions.
+Tools you use:
+Use get_case tool to get the case details.
+    - send_email_to_vendor: Send an initial outreach email to a vendor
+    - get_unread_vendor_emails: Check for new responses from vendors
+    - reply_to_vendor_email: Reply to a vendor's email
+    - mark_email_as_read: Mark emails as read after processing
+    - get_email_thread: View the full conversation with a vendor
+    - get_case_communications: View all communications for a specific case
+
+IMPORTANT - BEFORE SENDING ANY MESSAGE TO A VENDOR ASK USER FOR PERMISSION.
 
 Final Goal:
 The system continuously refines the negotiation process until the user receives the best possible deal and makes a decision.
@@ -77,6 +101,25 @@ def init_db():
         search_goal TEXT,
         search_query TEXT,
         search_results TEXT,
+        FOREIGN KEY (case_id) REFERENCES cases (id)
+    )
+    ''')
+    
+    # Create email_communications table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS email_communications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER,
+        vendor_email TEXT,
+        vendor_name TEXT,
+        vendor_website TEXT,
+        subject TEXT,
+        message_id TEXT,
+        thread_id TEXT,
+        email_type TEXT,
+        email_content TEXT,
+        sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status TEXT DEFAULT 'sent',
         FOREIGN KEY (case_id) REFERENCES cases (id)
     )
     ''')
@@ -956,6 +999,653 @@ def scrape_website_contacts(urls: List[str], max_pages_per_site: int = 10, max_w
             "message": f"Failed to run website scraping: {str(e)}"
         }
 
+# GMAIL INTEGRATION
+# Gmail API scopes
+GMAIL_SCOPES = [
+    'https://www.googleapis.com/auth/gmail.send',
+    'https://www.googleapis.com/auth/gmail.readonly',
+    'https://www.googleapis.com/auth/gmail.modify'
+]
+
+@mcp.tool()
+def send_email_to_vendor(case_id: int, vendor_email: str, subject: str, body: str, 
+                         vendor_name: str = "", vendor_website: str = "") -> Dict[str, Any]:
+    """
+    Send an email to a vendor and track it in the database.
+    
+    Args:
+        case_id: The ID of the case this email is associated with
+        vendor_email: Email address of the vendor
+        subject: Email subject line
+        body: Email body in HTML format
+        vendor_name: Name of the vendor (optional)
+        vendor_website: Website of the vendor (optional)
+        
+    Returns:
+        Dictionary with operation status, email ID if successful
+    """
+    try:
+        # Get Gmail service
+        service = get_gmail_service()
+        
+        # Create message
+        message = MIMEMultipart()
+        message['to'] = vendor_email
+        message['subject'] = subject
+            
+        # Add body as HTML
+        message.attach(MIMEText(body, 'html'))
+        
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+        
+        # Send message
+        sent_message = service.users().messages().send(
+            userId='me',
+            body={'raw': raw_message}
+        ).execute()
+        
+        message_id = sent_message['id']
+        thread_id = sent_message.get('threadId', '')
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT id FROM cases WHERE id = ?", (case_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+        
+        # Insert email record
+        cursor.execute("""
+        INSERT INTO email_communications 
+        (case_id, vendor_email, vendor_name, vendor_website, subject, message_id, thread_id, email_type, email_content, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            case_id,
+            vendor_email,
+            vendor_name,
+            vendor_website,
+            subject,
+            message_id,
+            thread_id,
+            'initial_outreach',
+            body,
+            'sent'
+        ))
+        
+        email_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "email_id": email_id,
+            "message_id": message_id,
+            "thread_id": thread_id,
+            "message": f"Email sent to {vendor_email} successfully and tracked with ID: {email_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error sending email: {str(e)}"
+        }
+
+def get_gmail_service():
+    """
+    Create a Gmail API service object.
+    
+    Returns:
+        A Gmail API service object.
+    """
+    creds = None
+    credentials_file = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
+    
+    # Check if token.pickle exists (stored credentials)
+    if os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as token:
+            creds = pickle.load(token)
+    
+    # If credentials don't exist or are invalid, get new ones
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists(credentials_file):
+                raise FileNotFoundError(f"Credentials file '{credentials_file}' not found. Run setup_gmail_api.py first.")
+            
+            flow = InstalledAppFlow.from_client_secrets_file(credentials_file, GMAIL_SCOPES)
+            creds = flow.run_local_server(port=0)
+        
+        # Save the credentials for the next run
+        with open('token.pickle', 'wb') as token:
+            pickle.dump(creds, token)
+    
+    return build('gmail', 'v1', credentials=creds)
+
+@mcp.tool()
+def get_unread_vendor_emails(max_results: int = 10, associate_with_case: bool = True) -> Dict[str, Any]:
+    """
+    Retrieve unread emails that might be from vendors, and optionally associate them with cases.
+    
+    Args:
+        max_results: Maximum number of emails to retrieve
+        associate_with_case: Whether to attempt associating emails with existing cases
+        
+    Returns:
+        Dictionary with operation status and unread emails
+    """
+    try:
+        # Get Gmail service
+        service = get_gmail_service()
+        
+        # Search for unread emails
+        results = service.users().messages().list(
+            userId='me',
+            q='is:unread',
+            maxResults=max_results
+        ).execute()
+        
+        messages = results.get('messages', [])
+        
+        if not messages:
+            return {
+                "success": True,
+                "unread_emails": [],
+                "message": "No unread messages found."
+            }
+        
+        unread_emails = []
+        
+        for message in messages:
+            msg = service.users().messages().get(
+                userId='me',
+                id=message['id'],
+                format='full'
+            ).execute()
+            
+            # Extract headers
+            headers = msg['payload']['headers']
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+            sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown Sender')
+            date = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
+            
+            # Extract thread ID
+            thread_id = msg['threadId']
+            
+            # Format date
+            try:
+                parsed_date = datetime.strptime(date.split(' +')[0].strip(), '%a, %d %b %Y %H:%M:%S')
+                formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                formatted_date = date
+            
+            # Extract email body
+            body = ""
+            if 'parts' in msg['payload']:
+                for part in msg['payload']['parts']:
+                    if part['mimeType'] == 'text/plain':
+                        if 'data' in part['body']:
+                            body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                        break
+            elif 'body' in msg['payload'] and 'data' in msg['payload']['body']:
+                body = base64.urlsafe_b64decode(msg['payload']['body']['data']).decode('utf-8')
+            
+            email_data = {
+                'id': message['id'],
+                'thread_id': thread_id,
+                'sender': sender,
+                'subject': subject,
+                'date': formatted_date,
+                'snippet': msg['snippet'],
+                'body': body
+            }
+            
+            # Try to find associated case if requested
+            if associate_with_case:
+                conn = sqlite3.connect(DB_FILE)
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                # Look for thread_id in email_communications
+                cursor.execute("""
+                SELECT ec.case_id, c.subject as case_subject FROM email_communications ec
+                JOIN cases c ON ec.case_id = c.id
+                WHERE ec.thread_id = ?
+                LIMIT 1
+                """, (thread_id,))
+                
+                case_row = cursor.fetchone()
+                if case_row:
+                    email_data['associated_case'] = {
+                        'case_id': case_row['case_id'],
+                        'case_subject': case_row['case_subject']
+                    }
+                
+                # Try to infer from email content/subject if not found by thread
+                if 'associated_case' not in email_data:
+                    # Get all active cases
+                    cursor.execute("SELECT id, subject FROM cases ORDER BY id DESC LIMIT 10")
+                    cases = cursor.fetchall()
+                    
+                    # Simple heuristic: check if case subject appears in email subject or body
+                    for case in cases:
+                        if (case['subject'].lower() in subject.lower() or 
+                            case['subject'].lower() in body.lower()):
+                            email_data['potential_case'] = {
+                                'case_id': case['id'],
+                                'case_subject': case['subject'],
+                                'confidence': 'medium'
+                            }
+                            break
+                
+                conn.close()
+            
+            unread_emails.append(email_data)
+        
+        return {
+            "success": True,
+            "unread_emails": unread_emails,
+            "count": len(unread_emails),
+            "message": f"Found {len(unread_emails)} unread emails"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving unread emails: {str(e)}"
+        }
+
+@mcp.tool()
+def reply_to_vendor_email(case_id: int, message_id: str, reply_body: str, update_status: str = "ongoing") -> Dict[str, Any]:
+    """
+    Reply to a vendor email and track the communication in the database.
+    
+    Args:
+        case_id: ID of the case associated with this communication
+        message_id: ID of the message to reply to
+        reply_body: Body of the reply message in HTML format
+        update_status: New status for the communication (ongoing, completed, etc.)
+        
+    Returns:
+        Dictionary with operation status and reply details
+    """
+    try:
+        # Get Gmail service
+        service = get_gmail_service()
+        
+        # Get the original message to extract headers
+        original_message = service.users().messages().get(
+            userId='me',
+            id=message_id,
+            format='metadata',
+            metadataHeaders=['Subject', 'From', 'To', 'Message-ID', 'References', 'In-Reply-To']
+        ).execute()
+        
+        # Extract headers
+        headers = original_message['payload']['headers']
+        subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+        sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
+        recipient = next((h['value'] for h in headers if h['name'].lower() == 'to'), '')
+        message_id_header = next((h['value'] for h in headers if h['name'].lower() == 'message-id'), '')
+        references = next((h['value'] for h in headers if h['name'].lower() == 'references'), message_id_header)
+        
+        # Extract email address from sender
+        sender_email = re.search(r'<(.+?)>', sender)
+        if sender_email:
+            sender_email = sender_email.group(1)
+        else:
+            sender_email = sender
+        
+        # Extract thread ID
+        thread_id = original_message['threadId']
+        
+        # Create reply message
+        message = MIMEMultipart()
+        message['to'] = sender_email
+        
+        # Check if subject already has Re: prefix
+        if not subject.lower().startswith('re:'):
+            message['subject'] = f"Re: {subject}"
+        else:
+            message['subject'] = subject
+            
+        # Set references and in-reply-to headers for proper threading
+        if references:
+            message['References'] = references
+        message['In-Reply-To'] = message_id_header
+        
+        # Add body
+        message.attach(MIMEText(reply_body, 'html'))
+        
+        # Encode message
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+        
+        # Send message
+        sent_message = service.users().messages().send(
+            userId='me',
+            body={'raw': raw_message, 'threadId': thread_id}
+        ).execute()
+        
+        reply_message_id = sent_message['id']
+        
+        # Store in database
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT id FROM cases WHERE id = ?", (case_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+        
+        # Get vendor name and website if available from previous communications
+        cursor.execute("""
+        SELECT vendor_name, vendor_website FROM email_communications 
+        WHERE case_id = ? AND vendor_email = ? 
+        ORDER BY id DESC LIMIT 1
+        """, (case_id, sender_email))
+        
+        vendor_info = cursor.fetchone()
+        vendor_name = vendor_info[0] if vendor_info else ""
+        vendor_website = vendor_info[1] if vendor_info else ""
+        
+        # Insert reply record
+        cursor.execute("""
+        INSERT INTO email_communications 
+        (case_id, vendor_email, vendor_name, vendor_website, subject, message_id, thread_id, email_type, email_content, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            case_id,
+            sender_email,
+            vendor_name,
+            vendor_website,
+            message['subject'],
+            reply_message_id,
+            thread_id,
+            'reply',
+            reply_body,
+            update_status
+        ))
+        
+        email_id = cursor.lastrowid
+        
+        # Update status of previous messages in the same thread
+        cursor.execute("""
+        UPDATE email_communications 
+        SET status = ? 
+        WHERE thread_id = ? AND id != ?
+        """, (update_status, thread_id, email_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "email_id": email_id,
+            "message_id": reply_message_id,
+            "thread_id": thread_id,
+            "message": f"Reply sent to {sender_email} successfully and tracked with ID: {email_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error sending reply: {str(e)}"
+        }
+
+@mcp.tool()
+def mark_email_as_read(message_id: str) -> Dict[str, Any]:
+    """
+    Mark an email as read.
+    
+    Args:
+        message_id: ID of the message to mark as read
+        
+    Returns:
+        Dictionary with operation status
+    """
+    try:
+        # Get Gmail service
+        service = get_gmail_service()
+        
+        # Remove UNREAD label
+        service.users().messages().modify(
+            userId='me',
+            id=message_id,
+            body={'removeLabelIds': ['UNREAD']}
+        ).execute()
+        
+        return {
+            "success": True,
+            "message": f"Message {message_id} marked as read"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error marking message as read: {str(e)}"
+        }
+
+@mcp.tool()
+def get_email_thread(thread_id: str) -> Dict[str, Any]:
+    """
+    Get all messages in an email thread.
+    
+    Args:
+        thread_id: ID of the thread to retrieve
+        
+    Returns:
+        Dictionary with operation status and thread messages
+    """
+    try:
+        # Get Gmail service
+        service = get_gmail_service()
+        
+        # Get thread
+        thread = service.users().threads().get(
+            userId='me',
+            id=thread_id
+        ).execute()
+        
+        messages = []
+        
+        for message in thread['messages']:
+            # Extract headers
+            headers = message['payload']['headers']
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+            sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown Sender')
+            recipient = next((h['value'] for h in headers if h['name'].lower() == 'to'), 'Unknown Recipient')
+            date = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
+            
+            # Format date
+            try:
+                parsed_date = datetime.strptime(date.split(' +')[0].strip(), '%a, %d %b %Y %H:%M:%S')
+                formatted_date = parsed_date.strftime('%Y-%m-%d %H:%M:%S')
+            except:
+                formatted_date = date
+            
+            # Extract email body
+            body = ""
+            if 'parts' in message['payload']:
+                for part in message['payload']['parts']:
+                    if part['mimeType'] == 'text/plain':
+                        if 'data' in part['body']:
+                            body = base64.urlsafe_b64decode(part['body']['data']).decode('utf-8')
+                        break
+            elif 'body' in message['payload'] and 'data' in message['payload']['body']:
+                body = base64.urlsafe_b64decode(message['payload']['body']['data']).decode('utf-8')
+            
+            messages.append({
+                'id': message['id'],
+                'sender': sender,
+                'recipient': recipient,
+                'subject': subject,
+                'date': formatted_date,
+                'snippet': message.get('snippet', ''),
+                'body': body,
+                'is_unread': 'UNREAD' in message.get('labelIds', [])
+            })
+        
+        # Get case information from database if available
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+        SELECT ec.case_id, c.subject as case_subject 
+        FROM email_communications ec
+        JOIN cases c ON ec.case_id = c.id
+        WHERE ec.thread_id = ?
+        LIMIT 1
+        """, (thread_id,))
+        
+        case_row = cursor.fetchone()
+        case_info = None
+        
+        if case_row:
+            case_info = {
+                'case_id': case_row['case_id'],
+                'case_subject': case_row['case_subject']
+            }
+            
+            # Get all communications in this thread from database
+            cursor.execute("""
+            SELECT id, email_type, status, sent_at 
+            FROM email_communications
+            WHERE thread_id = ?
+            ORDER BY sent_at
+            """, (thread_id,))
+            
+            communications = []
+            for row in cursor.fetchall():
+                communications.append(dict(row))
+                
+            case_info['communications'] = communications
+            
+        conn.close()
+        
+        return {
+            "success": True,
+            "thread_id": thread_id,
+            "messages": messages,
+            "message_count": len(messages),
+            "case_info": case_info,
+            "subject": messages[0]['subject'] if messages else "No messages found"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving email thread: {str(e)}"
+        }
+
+@mcp.tool()
+def get_case_communications(case_id: int) -> Dict[str, Any]:
+    """
+    Get all email communications associated with a specific case.
+    
+    Args:
+        case_id: ID of the case to retrieve communications for
+        
+    Returns:
+        Dictionary with operation status and list of communications
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT subject FROM cases WHERE id = ?", (case_id,))
+        case_row = cursor.fetchone()
+        
+        if not case_row:
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+            
+        case_subject = case_row['subject']
+        
+        # Get all email communications for this case
+        cursor.execute("""
+        SELECT ec.*, 
+               COUNT(all_ec.id) as thread_message_count
+        FROM email_communications ec
+        LEFT JOIN email_communications all_ec ON ec.thread_id = all_ec.thread_id
+        WHERE ec.case_id = ?
+        GROUP BY ec.thread_id, ec.id
+        ORDER BY ec.thread_id, ec.sent_at
+        """, (case_id,))
+        
+        communications_rows = cursor.fetchall()
+        
+        # Group by thread_id for better organization
+        threads = {}
+        for row in communications_rows:
+            comm = dict(row)
+            thread_id = comm['thread_id']
+            
+            if thread_id not in threads:
+                threads[thread_id] = {
+                    'thread_id': thread_id,
+                    'subject': comm['subject'],
+                    'vendor_email': comm['vendor_email'],
+                    'vendor_name': comm['vendor_name'],
+                    'vendor_website': comm['vendor_website'],
+                    'messages': [],
+                    'last_update': comm['sent_at'],
+                    'status': comm['status'],
+                    'message_count': comm['thread_message_count']
+                }
+                
+            threads[thread_id]['messages'].append({
+                'id': comm['id'],
+                'message_id': comm['message_id'],
+                'email_type': comm['email_type'],
+                'email_content': comm['email_content'],
+                'sent_at': comm['sent_at'],
+                'status': comm['status']
+            })
+                
+        # Convert to list and sort by last_update (most recent first)
+        thread_list = list(threads.values())
+        thread_list.sort(key=lambda x: x['last_update'], reverse=True)
+        
+        # Count unique vendors
+        cursor.execute("""
+        SELECT COUNT(DISTINCT vendor_email) as vendor_count
+        FROM email_communications
+        WHERE case_id = ?
+        """, (case_id,))
+        
+        vendor_count = cursor.fetchone()['vendor_count']
+        
+        conn.close()
+        
+        return {
+            "success": True,
+            "case_id": case_id,
+            "case_subject": case_subject,
+            "threads": thread_list,
+            "thread_count": len(thread_list),
+            "vendor_count": vendor_count,
+            "message": f"Found {len(thread_list)} communication threads with {vendor_count} unique vendors"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving case communications: {str(e)}"
+        } 
+
+
+
 # Main execution
 if __name__ == "__main__":
-    mcp.run() 
+    mcp.run()
