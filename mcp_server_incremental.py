@@ -37,6 +37,7 @@ You are a multi-agent system designed to help users find the best offers for pro
 	•	Acts as a friendly and professional advisor who gathers details from the user.
 	•	Dynamically asks relevant questions to deeply understand the user's needs (e.g., budget, preferences, constraints).
 	•	Must extract all necessary information in a maximum of five messages before passing the request to the Researcher.
+    -   Before searching and messaging summarise what the user wants and confirm this understanding with him/her
 
 Output:
 	•	Google Search Query: A precise, 2-12 word phrase for finding vendors offering the desired service/product.
@@ -51,7 +52,7 @@ Output:
 3. Negotiator (Communication Manager)
 	•	Creates personalized email messages for vendors based on the case details.
 	•	Sends emails to vendors, tracks communications, and manages responses.
-	•	Analyzes responses and follows up appropriately.
+	•	Analyzes responses, extract offer details and creates an offer in a database
 	•	Provides summary of communications and recommends next actions.
 Tools you use:
 Use get_case tool to get the case details.
@@ -120,6 +121,24 @@ def init_db():
         email_content TEXT,
         sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         status TEXT DEFAULT 'sent',
+        FOREIGN KEY (case_id) REFERENCES cases (id)
+    )
+    ''')
+    
+    # Create offers table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS offers (
+        offer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER,
+        status TEXT CHECK(status IN ('pending', 'active', 'accepted', 'rejected', 'expired')) DEFAULT 'pending',
+        price REAL,
+        timeline TEXT,
+        accuracy REAL,
+        additional_details TEXT,
+        communication_thread_id TEXT,
+        vendor_email TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (case_id) REFERENCES cases (id)
     )
     ''')
@@ -1642,9 +1661,71 @@ def get_case_communications(case_id: int) -> Dict[str, Any]:
         return {
             "success": False,
             "message": f"Error retrieving case communications: {str(e)}"
-        } 
+        }
 
-
+@mcp.tool()
+def create_offer(case_id: int, price: float, timeline: str, accuracy: float, 
+                vendor_email: str, communication_thread_id: str, 
+                status: str = "pending", additional_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Create a new offer record in the database based on a vendor's response.
+    
+    Args:
+        case_id: ID of the case this offer is associated with
+        price: The price offered by the vendor
+        timeline: Timeline for delivery/completion offered by the vendor
+        accuracy: A value representing how well the offer matches the user's requirements (0.0-1.0)
+        vendor_email: Email address of the vendor making the offer
+        communication_thread_id: ID of the email thread containing this offer
+        status: Current status of the offer (pending, active, accepted, rejected, expired)
+        additional_details: Any additional parameters or notes about the offer
+    
+    Returns:
+        Dictionary with operation result and offer ID
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT id FROM cases WHERE id = ?", (case_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+        
+        # Insert the offer
+        cursor.execute("""
+        INSERT INTO offers 
+        (case_id, price, timeline, accuracy, vendor_email, communication_thread_id, status, additional_details)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            case_id,
+            price,
+            timeline,
+            accuracy,
+            vendor_email,
+            communication_thread_id,
+            status,
+            json.dumps(additional_details or {})
+        ))
+        
+        offer_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "offer_id": offer_id,
+            "message": f"New offer created with ID: {offer_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to create offer: {str(e)}"
+        }
 
 # Main execution
 if __name__ == "__main__":
