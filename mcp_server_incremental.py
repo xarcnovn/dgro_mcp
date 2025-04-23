@@ -34,34 +34,49 @@ PROMPT_TEMPLATE = """
 You are a multi-agent system designed to help users find the best offers for products or services. The process involves three specialized agents working together:
 
 1. Consultant (First Point of Contact)
-	•	Acts as a friendly and professional advisor who gathers details from the user.
-	•	Dynamically asks relevant questions to deeply understand the user's needs (e.g., budget, preferences, constraints).
-	•	Must extract all necessary information in a maximum of five messages before passing the request to the Researcher.
-    -   Before searching and messaging summarise what the user wants and confirm this understanding with him/her
-
+	- Acts as a friendly and professional advisor who gathers details from the user.
+	- Dynamically asks relevant questions to deeply understand the user's needs (e.g., budget, preferences, constraints).
+	- Must extract all necessary information in a maximum of five messages before passing the request to the Researcher.
+    - Before searching and messaging summarise what the user wants and confirm this understanding with him/her
+    - You ask user about personal details: name, email, phone number to be able to send messages to vendors
+    Tools you use:
+    - create_case
+    - update_case
+    - get_case
+    - create_user
+    - update_user
+    - get_user
 Output:
-	•	Google Search Query: A precise, 2-12 word phrase for finding vendors offering the desired service/product.
+	- Google Search Query: A precise, 2-6 word phrase for finding vendors offering the desired service/product.
 
 2. Researcher (Searcher and contact data Finder)
-	•	Uses Google Custom Search API to find businesses offering the desired service/product.
-	•	Returns a list of websites of businesses offering the desired service/product.
-    - Then scrape the websites to find contact details.
+    - based on the case details, uses Google Custom Search API to find businesses offering the desired service/product
+	- Returns a list of websites of businesses offering the desired service/product. Google search returns a list sorted by relevance, so the first website is probably the most relevant and so on.
+    - Then scrape the websites to find contact details
+    Tools you use:
+    - get_case
+    - create_search
+    - execute_google_search
+    - scrape_website_contacts
 Output:
     - Return a list of businesses with contact details. The list should include the website, email, and description of the business.
 
 3. Negotiator (Communication Manager)
-	•	Creates personalized email messages for vendors based on the case details.
-	•	Sends emails to vendors, tracks communications, and manages responses.
-	•	Analyzes responses, extract offer details and creates an offer in a database
-	•	Provides summary of communications and recommends next actions.
+	- Creates personalized email messages for vendors based on the case details. The messages must be formatted with <html>,<body>,<br> tags so they look natural. The message must come across as the from user, not as a bot.
+	- Sends emails to vendors, tracks communications, and manages responses.
+	- Analyzes responses, extract offer details and creates an offer in a database. This is SUPERIMPORTANT step, you must 
+	- Provides summary of communications and recommends next actions.
 Tools you use:
-Use get_case tool to get the case details.
+    - get_case
+    - get_case_offers: Get an offer record from the database
     - send_email_to_vendor: Send an initial outreach email to a vendor
     - get_unread_vendor_emails: Check for new responses from vendors
     - reply_to_vendor_email: Reply to a vendor's email
     - mark_email_as_read: Mark emails as read after processing
     - get_email_thread: View the full conversation with a vendor
     - get_case_communications: View all communications for a specific case
+    - create_offer: Create a new offer record in the database based on the new vendor's response
+    - update_offer: Update an existing offer record in the database based on the new vendor's response
 
 IMPORTANT - BEFORE SENDING ANY MESSAGE TO A VENDOR ASK USER FOR PERMISSION.
 
@@ -69,9 +84,8 @@ Final Goal:
 The system continuously refines the negotiation process until the user receives the best possible deal and makes a decision.
 """
 @mcp.prompt()
-def initial_prompt() -> str:
+def system_prompt() -> str:
     return PROMPT_TEMPLATE
-
 
 # SQLite database setup
 DB_FILE = "case_search.db"
@@ -91,6 +105,18 @@ def init_db():
         budget REAL,
         timeline TEXT,
         additional_features TEXT
+    )
+    ''')
+    
+    # Create users table
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        case_id INTEGER,
+        name TEXT,
+        email TEXT,
+        phone TEXT,
+        FOREIGN KEY (case_id) REFERENCES cases (id)
     )
     ''')
     
@@ -1725,6 +1751,353 @@ def create_offer(case_id: int, price: float, timeline: str, accuracy: float,
         return {
             "success": False,
             "message": f"Failed to create offer: {str(e)}"
+        }
+
+@mcp.tool()
+def update_offer(offer_id: int, price: Optional[float] = None, timeline: Optional[str] = None, 
+                accuracy: Optional[float] = None, vendor_email: Optional[str] = None, 
+                communication_thread_id: Optional[str] = None, status: Optional[str] = None, 
+                additional_details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """
+    Update an existing offer with new information from vendor communications.
+    
+    Args:
+        offer_id: ID of the offer to update
+        price: Updated price from the vendor
+        timeline: Updated timeline for delivery/completion
+        accuracy: Updated accuracy value of how well the offer matches requirements
+        vendor_email: Updated vendor email (if changed)
+        communication_thread_id: Updated or new thread ID containing additional offer details
+        status: Updated status of the offer (pending, active, accepted, rejected, expired)
+        additional_details: Additional or updated parameters about the offer
+    
+    Returns:
+        Dictionary with operation result
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Verify the offer exists
+        cursor.execute("SELECT offer_id, additional_details FROM offers WHERE offer_id = ?", (offer_id,))
+        offer = cursor.fetchone()
+        
+        if not offer:
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Offer with ID {offer_id} not found"
+            }
+        
+        # Prepare update data with only non-None values
+        update_data = {}
+        if price is not None:
+            update_data['price'] = price
+        if timeline is not None:
+            update_data['timeline'] = timeline
+        if accuracy is not None:
+            update_data['accuracy'] = accuracy
+        if vendor_email is not None:
+            update_data['vendor_email'] = vendor_email
+        if communication_thread_id is not None:
+            update_data['communication_thread_id'] = communication_thread_id
+        if status is not None:
+            update_data['status'] = status
+        
+        # Handle additional_details - merge with existing if provided
+        if additional_details is not None:
+            existing_details = json.loads(offer[1] or '{}')
+            existing_details.update(additional_details)
+            update_data['additional_details'] = json.dumps(existing_details)
+        
+        # If no updates provided, return early
+        if not update_data:
+            conn.close()
+            return {
+                "success": True,
+                "message": "No updates provided for offer"
+            }
+        
+        # Always update the updated_at timestamp
+        update_data['updated_at'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # Build the SQL update statement dynamically
+        sql_parts = [f"{key} = ?" for key in update_data.keys()]
+        sql = f"UPDATE offers SET {', '.join(sql_parts)} WHERE offer_id = ?"
+        
+        # Execute the update
+        params = list(update_data.values()) + [offer_id]
+        cursor.execute(sql, params)
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "message": f"Offer {offer_id} updated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to update offer: {str(e)}"
+        }
+
+@mcp.tool()
+def create_user(case_id: int, name: str, email: str, phone: str) -> Dict[str, Any]:
+    """
+    Create a new user record in the database.
+    
+    Args:
+        case_id: ID of the case this user is associated with
+        name: User's full name
+        email: User's email address
+        phone: User's phone number
+    
+    Returns:
+        Dictionary with operation result and user ID
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT id FROM cases WHERE id = ?", (case_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+        
+        # Check if user already exists for this case
+        cursor.execute("SELECT id FROM users WHERE case_id = ?", (case_id,))
+        existing_user = cursor.fetchone()
+        
+        if existing_user:
+            conn.close()
+            return {
+                "success": False,
+                "message": f"User already exists for case ID {case_id}. Use update_user instead."
+            }
+        
+        # Insert the user
+        cursor.execute("""
+        INSERT INTO users 
+        (case_id, name, email, phone)
+        VALUES (?, ?, ?, ?)
+        """, (
+            case_id,
+            name,
+            email,
+            phone
+        ))
+        
+        user_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "message": f"New user created with ID: {user_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to create user: {str(e)}"
+        }
+
+@mcp.tool()
+def update_user(case_id: int, name: Optional[str] = None, email: Optional[str] = None, 
+               phone: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Update an existing user's information.
+    
+    Args:
+        case_id: ID of the case the user is associated with
+        name: Updated user's name
+        email: Updated user's email
+        phone: Updated user's phone number
+    
+    Returns:
+        Dictionary with operation result
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        
+        # Get the current user data
+        cursor.execute("SELECT * FROM users WHERE case_id = ?", (case_id,))
+        user = cursor.fetchone()
+        
+        if not user:
+            conn.close()
+            return {
+                "success": False,
+                "message": f"No user found for case ID {case_id}"
+            }
+        
+        # Prepare update parameters
+        user_data = {
+            "name": name if name is not None else user[2],
+            "email": email if email is not None else user[3],
+            "phone": phone if phone is not None else user[4]
+        }
+        
+        # Update the user
+        cursor.execute("""
+        UPDATE users 
+        SET name = ?, email = ?, phone = ?
+        WHERE case_id = ?
+        """, (
+            user_data["name"],
+            user_data["email"],
+            user_data["phone"],
+            case_id
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        return {
+            "success": True,
+            "message": f"User information for case {case_id} updated successfully"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Failed to update user: {str(e)}"
+        }
+
+@mcp.tool()
+def get_user(case_id: int) -> Dict[str, Any]:
+    """
+    Get user information associated with a case.
+    
+    Args:
+        case_id: ID of the case to retrieve user for
+    
+    Returns:
+        Dictionary with user details
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Get user information
+        cursor.execute("""
+        SELECT id, case_id, name, email, phone
+        FROM users
+        WHERE case_id = ?
+        """, (case_id,))
+        
+        user_row = cursor.fetchone()
+        conn.close()
+        
+        if not user_row:
+            return {
+                "success": False,
+                "message": f"No user found for case ID {case_id}"
+            }
+        
+        return {
+            "success": True,
+            "user": dict(user_row)
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving user information: {str(e)}"
+        }
+
+@mcp.tool()
+def get_case_offers(case_id: int) -> Dict[str, Any]:
+    """
+    Retrieve all offers for a specific case with complete details.
+    
+    Args:
+        case_id: ID of the case to retrieve offers for
+    
+    Returns:
+        Dictionary with a list of complete offer details for the case
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Verify the case exists
+        cursor.execute("SELECT id FROM cases WHERE id = ?", (case_id,))
+        if not cursor.fetchone():
+            conn.close()
+            return {
+                "success": False,
+                "message": f"Case with ID {case_id} not found"
+            }
+        
+        # Get all offers for this case with full details
+        cursor.execute("""
+        SELECT offer_id, case_id, status, price, timeline, accuracy, 
+               additional_details, communication_thread_id, vendor_email,
+               created_at, updated_at
+        FROM offers
+        WHERE case_id = ?
+        ORDER BY created_at DESC
+        """, (case_id,))
+        
+        offers = []
+        for row in cursor.fetchall():
+            offer_data = dict(row)
+            
+            # Parse JSON fields
+            if 'additional_details' in offer_data and offer_data['additional_details']:
+                try:
+                    offer_data['additional_details'] = json.loads(offer_data['additional_details'])
+                except:
+                    # If JSON parsing fails, keep as is
+                    pass
+                    
+            # Get vendor name if available
+            if offer_data['vendor_email']:
+                cursor.execute("""
+                SELECT vendor_name, vendor_website 
+                FROM email_communications 
+                WHERE vendor_email = ? AND case_id = ?
+                ORDER BY id DESC 
+                LIMIT 1
+                """, (offer_data['vendor_email'], case_id))
+                
+                vendor_info = cursor.fetchone()
+                if vendor_info:
+                    offer_data['vendor_name'] = vendor_info['vendor_name']
+                    offer_data['vendor_website'] = vendor_info['vendor_website']
+            
+            offers.append(offer_data)
+        
+        # Get case details for context
+        cursor.execute("""
+        SELECT subject, features, location, budget, timeline
+        FROM cases
+        WHERE id = ?
+        """, (case_id,))
+        
+        case_info = dict(cursor.fetchone()) if cursor.fetchone() else {}
+        
+        conn.close()
+        
+        return {
+            "success": True,
+            "case_id": case_id,
+            "case_info": case_info,
+            "offers": offers,
+            "count": len(offers),
+            "message": f"Found {len(offers)} offers for case {case_id}"
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "message": f"Error retrieving case offers: {str(e)}"
         }
 
 # Main execution
