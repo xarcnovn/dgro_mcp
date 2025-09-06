@@ -1,10 +1,15 @@
 [project]
-name = "weather"
+name = "mcp_client"
 version = "0.1.0"
-description = "Add your description here"
+description = "MCP Client - A client library for connecting to MCP servers"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.8"
 dependencies = [
-    "httpx>=0.28.1",
-    "mcp[cli]>=1.6.0",
+    "aiohttp>=3.8.0",
+    "fastapi>=0.95.0",
+    "uvicorn>=0.22.0",
+    "websockets>=11.0.0",
 ]
+
+[project.scripts]
+mcp_client = "mcp_client.__main__:main"

@@ -2102,4 +2102,41 @@ def get_case_offers(case_id: int) -> Dict[str, Any]:
 
 # Main execution
 if __name__ == "__main__":
-    mcp.run()
+    # Configure HTTP server settings for Streamable HTTP transport
+    try:
+        # Host/port configurable via env for flexibility (defaults for iOS Simulator)
+        mcp.settings.host = os.getenv("MCP_HOST", "127.0.0.1")
+        mcp.settings.port = int(os.getenv("MCP_PORT", "8765"))
+    except Exception:
+        # Fallback silently if settings are not available in this SDK version
+        pass
+
+    # Optional: keep default path "/mcp" for compatibility with clients
+    try:
+        if not getattr(mcp.settings, "streamable_http_path", None):
+            mcp.settings.streamable_http_path = "/mcp"
+        # Configure SSE paths as well for fallback
+        if not getattr(mcp.settings, "sse_path", None):
+            mcp.settings.sse_path = "/mcp"
+        if not getattr(mcp.settings, "mount_path", None):
+            mcp.settings.mount_path = "/mcp"
+    except Exception:
+        pass
+
+    # Startup banner for clarity
+    try:
+        host = getattr(mcp.settings, "host", "127.0.0.1")
+        port = getattr(mcp.settings, "port", 8765)
+        path = getattr(mcp.settings, "streamable_http_path", "/mcp")
+        print(f"[FastMCP] Streamable HTTP server starting at http://{host}:{port}{path}")
+    except Exception:
+        pass
+
+    # Run FastMCP with Streamable HTTP if available; fall back to SSE if not supported
+    try:
+        mcp.run(transport="streamable-http")
+    except Exception as e:
+        print(f"[FastMCP] Streamable HTTP not available ({e}). Falling back to SSE at http://{host}:{port}{path}")
+        # For SSE, reuse the same mount/path settings
+        # Some versions use mount_path; others use sse_path internally
+        mcp.run(transport="sse")
