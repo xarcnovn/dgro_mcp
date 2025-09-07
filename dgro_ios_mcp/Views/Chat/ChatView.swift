@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ChatView: View {
+    @EnvironmentObject private var mcp: MCPClientManager
     @StateObject private var store = MockStore()
     @State private var draft: String = ""
 
@@ -48,7 +49,12 @@ struct ChatView: View {
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        store.sendUser(text)
+        // Show user message immediately
+        store.messages.append(ChatMessage(text: text, isUser: true, timestamp: Date()))
+        Task { @MainActor in
+            let reply = await mcp.chatOnce(userText: text)
+            store.messages.append(ChatMessage(text: reply, isUser: false, timestamp: Date()))
+        }
         draft = ""
     }
 }
