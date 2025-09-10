@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct ChatView: View {
-    @EnvironmentObject private var mcp: MCPClientManager
-    @StateObject private var store = MockStore()
+    @StateObject private var chatManager = IntegratedChatManager()
     @State private var draft: String = ""
 
     var body: some View {
@@ -10,7 +9,7 @@ struct ChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 12) {
-                        ForEach(store.messages) { message in
+                        ForEach(chatManager.messages) { message in
                             HStack(alignment: .bottom) {
                                 if message.isUser { Spacer(minLength: 50) }
                                 MessageBubble(message: message)
@@ -22,11 +21,16 @@ struct ChatView: View {
                         .padding(.top, 12)
                     }
                 }
-                .onChange(of: store.messages.count) { _ in
-                    if let last = store.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                .onChange(of: chatManager.messages.count) { _ in
+                    if let last = chatManager.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
                 }
                 .onAppear {
-                    if let last = store.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    if let last = chatManager.messages.last { proxy.scrollTo(last.id, anchor: .bottom) }
+                    
+                    // Start MCP server and connect
+                    Task {
+                        await chatManager.startServer()
+                    }
                 }
             }
 
@@ -36,24 +40,49 @@ struct ChatView: View {
                     .textFieldStyle(.roundedBorder)
                     .lineLimit(1...4)
                 Button(action: send) {
-                    Image(systemName: "paperplane.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                    if chatManager.isProcessing {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "paperplane.fill")
+                            .font(.system(size: 18, weight: .semibold))
+                    }
                 }
-                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || chatManager.isProcessing)
             }
             .padding(.all, 12)
         }
         .navigationTitle("Chat")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("Test Tools") {
+                    Task {
+                        await chatManager.sendMessage("What tools do you have available?")
+                    }
+                }
+                .font(.caption)
+                .disabled(!chatManager.isConnected)
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack {
+                    Circle()
+                        .fill(chatManager.isConnected ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(chatManager.connectionStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        // Show user message immediately
-        store.messages.append(ChatMessage(text: text, isUser: true, timestamp: Date()))
-        Task { @MainActor in
-            let reply = await mcp.chatOnce(userText: text)
-            store.messages.append(ChatMessage(text: reply, isUser: false, timestamp: Date()))
+        
+        Task {
+            await chatManager.sendMessage(text)
         }
         draft = ""
     }
