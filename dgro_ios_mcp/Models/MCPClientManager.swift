@@ -1,189 +1,174 @@
 import Foundation
-import Combine
 import MCP
 
 @MainActor
 final class MCPClientManager: ObservableObject {
+    @Published var messages: [ChatMessage] = []
     @Published var isConnected: Bool = false
-    @Published var statusMessage: String = "Disconnected"
-
+    @Published var connectionStatus: String = "Disconnected"
+    
     private var client: Client?
-    // Minimal DTO used for OpenAI request body (avoid SDK types here)
-    private struct ChatMessageDTO: Encodable { let role: String; let content: String }
-    private var openAIKey: String? {
-        // Prefer Info.plist, fall back to env for dev
-        if let key = Bundle.main.object(forInfoDictionaryKey: "OpenAI_API_Key") as? String, !key.isEmpty {
-            return key
-        }
-        return ProcessInfo.processInfo.environment["OPENAI_API_KEY"]
+    private var transport: HTTPClientTransport?
+    
+    init() {
+        setupInitialMessages()
     }
-    private var openAIModel: String {
-        if let model = Bundle.main.object(forInfoDictionaryKey: "OpenAI_Model") as? String, !model.isEmpty {
-            return model
-        }
-        return "gpt-5"
+    
+    private func setupInitialMessages() {
+        messages = [
+            ChatMessage(text: "Hi! I'm your MCP-powered agent. How can I help you today?", isUser: false, timestamp: Date())
+        ]
     }
-
-    func connect(endpoint: String = "http://127.0.0.1:8765/mcp") async {
-        guard let url = URL(string: endpoint) else {
-            statusMessage = "Invalid endpoint URL"
-            return
-        }
-
-        // If already connected, skip
-        if isConnected { return }
-
-        let client = Client(name: "DGro iOS", version: "1.0.0")
-        self.client = client
-
-        let transport = HTTPClientTransport(endpoint: url, streaming: true)
-
+    
+    func connect() async {
         do {
-            _ = try await client.connect(transport: transport)
-
-            // Register sampling handler so the server can request LLM completions via this client
-            await client.withSamplingHandler { [weak self] parameters async throws in
-                guard let self else {
-                    return await CreateSamplingMessage.Result(
-                        model: self?.openAIModel ?? "gpt-5",
-                        stopReason: .endTurn,
-                        role: .assistant,
-                        content: .text("Client unavailable")
-                    )
-                }
-
-                // Build chat sequence for OpenAI
-                var chat: [ChatMessageDTO] = []
-                if let sys = parameters.systemPrompt, !sys.isEmpty {
-                    chat.append(ChatMessageDTO(role: "system", content: sys))
-                }
-                for msg in parameters.messages {
-                    // Extract text content only for now
-                    var roleString = "user"
-                    switch msg.role {
-                    case .user: roleString = "user"
-                    case .assistant: roleString = "assistant"
-                    default: roleString = "user"
-                    }
-                    if case let .text(text) = msg.content {
-                        chat.append(ChatMessageDTO(role: roleString, content: text))
-                    }
-                }
-
-                let completionText = try await self.sampleWithOpenAI(
-                    chat: chat,
-                    maxTokens: parameters.maxTokens,
-                    temperature: parameters.temperature
-                )
-
-                return await CreateSamplingMessage.Result(
-                    model: self.openAIModel,
-                    stopReason: .endTurn,
-                    role: .assistant,
-                    content: .text(completionText)
-                )
+            connectionStatus = "Connecting..."
+            
+            // Create client
+            client = Client(name: "DGroMCP-iOS", version: "1.0.0")
+            
+            // Create HTTP transport for streamable connection
+            // FastMCP with streamable-http transport runs on port 8000 by default with /mcp endpoint
+            guard let serverURL = URL(string: "http://localhost:8000/mcp") else {
+                throw MCPError.invalidRequest("Invalid server URL")
             }
-
-            isConnected = true
-            statusMessage = "Connected to MCP at \(url.absoluteString)"
+            
+            transport = HTTPClientTransport(
+                endpoint: serverURL,
+                streaming: true
+            )
+            
+            // Connect to the server
+            if let client = client, let transport = transport {
+                let result = try await client.connect(transport: transport)
+                isConnected = true
+                connectionStatus = "Connected to MCP Server"
+                
+                // Log available capabilities
+                print("Connected to MCP server with capabilities:")
+                if result.capabilities.tools != nil {
+                    print("- Tools supported")
+                }
+                if result.capabilities.resources != nil {
+                    print("- Resources supported")
+                }
+                if result.capabilities.prompts != nil {
+                    print("- Prompts supported")
+                }
+            }
+            
         } catch {
             isConnected = false
-            statusMessage = "Failed to connect: \(error.localizedDescription)"
+            connectionStatus = "Connection failed: \(error.localizedDescription)"
+            print("MCP connection error: \(error)")
         }
     }
-
+    
     func disconnect() async {
-        guard client != nil else { return }
+        client = nil
+        transport = nil
         isConnected = false
-        statusMessage = "Disconnected"
-        self.client = nil
+        connectionStatus = "Disconnected"
     }
-
-    // MARK: - OpenAI sampling
-    private func sampleWithOpenAI(
-        chat: [ChatMessageDTO],
-        maxTokens: Int?,
-        temperature: Double?
-    ) async throws -> String {
-        guard let apiKey = openAIKey else {
-            return "OpenAI API key missing. Add OpenAI_API_Key to Info.plist or OPENAI_API_KEY env."
+    
+    func sendMessage(_ text: String) async {
+        // Add user message
+        let userMessage = ChatMessage(text: text, isUser: true, timestamp: Date())
+        messages.append(userMessage)
+        
+        guard isConnected, let client = client else {
+            // If not connected, show error message
+            let errorMessage = ChatMessage(
+                text: "Not connected to MCP server. Please check connection.",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(errorMessage)
+            return
         }
-
-        struct RequestDTO: Encodable {
-            let model: String
-            let messages: [ChatMessageDTO]
-            let max_tokens: Int?
-            let temperature: Double?
-        }
-        struct ResponseDTO: Decodable {
-            struct Choice: Decodable { struct Msg: Decodable { let role: String; let content: String }; let message: Msg }
-            let choices: [Choice]
-        }
-        let body = RequestDTO(model: openAIModel, messages: chat, max_tokens: maxTokens, temperature: temperature)
-        let data = try JSONEncoder().encode(body)
-
-        var request = URLRequest(url: URL(string: "https://api.openai.com/v1/chat/completions")!)
-        request.httpMethod = "POST"
-        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.addValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.httpBody = data
-
-        let (respData, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let text = String(data: respData, encoding: .utf8) ?? "<no body>"
-            return "OpenAI error: \(text)"
-        }
-        let decoded = try JSONDecoder().decode(ResponseDTO.self, from: respData)
-        return decoded.choices.first?.message.content ?? "<no completion>"
-    }
-
-    // MARK: - Simple chat orchestration with one optional tool call
-    struct ToolCall: Codable { let tool: String; let arguments: [String: String]? }
-
-    func chatOnce(userText: String) async -> String {
-        guard let client else { return "Not connected to MCP server." }
-
+        
         do {
-            // Fetch tool list for the system prompt
+            // For now, let's try to list available tools and show them
             let (tools, _) = try await client.listTools()
-            let toolSummary = tools.map { "- \($0.name): \($0.description ?? "")" }.joined(separator: "\n")
-
-            let system = """
-            You are a helpful assistant. You can call at most ONE tool from the list below by replying with ONLY a JSON object of the form:
-            {"tool":"<name>","arguments":{...}}
-            If no tool is needed, reply with a normal helpful answer.
-            Available tools:\n\n\(toolSummary)
-            """
-
-            let chat: [ChatMessageDTO] = [
-                .init(role: "system", content: system),
-                .init(role: "user", content: userText)
-            ]
-            let first = try await sampleWithOpenAI(chat: chat, maxTokens: 600, temperature: 0.2)
-
-            if let data = first.data(using: .utf8), let toolCall = try? JSONDecoder().decode(ToolCall.self, from: data) {
-                // Execute tool
-                let args = toolCall.arguments ?? [:]
-                let (content, isError) = try await client.callTool(name: toolCall.tool, arguments: args)
-                let resultText: String
-                switch content {
-                case .text(let t): resultText = t
-                default: resultText = String(describing: content)
-                }
-                // Ask the model to produce the final user-facing answer using the tool result
-                let followup: [ChatMessageDTO] = [
-                    .init(role: "system", content: system),
-                    .init(role: "user", content: userText),
-                    .init(role: "assistant", content: "[Tool \(toolCall.tool) \(isError ? "error" : "result")]\n\n\(resultText)")
-                ]
-                return try await sampleWithOpenAI(chat: followup, maxTokens: 600, temperature: 0.3)
-            } else {
-                return first
+            
+            var responseText = "Available MCP tools:\n"
+            for tool in tools {
+                let description = tool.description
+                responseText += "• \(tool.name): \(description)\n"
             }
+            
+            if tools.isEmpty {
+                responseText = "No tools available from the MCP server."
+            }
+            
+            let botMessage = ChatMessage(text: responseText, isUser: false, timestamp: Date())
+            messages.append(botMessage)
+            
         } catch {
-            return "Chat error: \(error.localizedDescription)"
+            let errorMessage = ChatMessage(
+                text: "Error communicating with MCP server: \(error.localizedDescription)",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(errorMessage)
+        }
+    }
+    
+    func callTool(name: String, arguments: [String: Any] = [:]) async {
+        guard isConnected, let client = client else {
+            let errorMessage = ChatMessage(
+                text: "Not connected to MCP server.",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(errorMessage)
+            return
+        }
+        
+        do {
+            // Convert arguments to MCP Value format
+            var mcpArgs: [String: MCP.Value] = [:]
+            for (key, value) in arguments {
+                mcpArgs[key] = MCP.Value.safe(value)
+            }
+            
+            let (content, isError) = try await client.callTool(name: name, arguments: mcpArgs)
+            
+            var responseText = ""
+            for item in content {
+                switch item {
+                case .text(let text):
+                    responseText += text + "\n"
+                case .image(_, let mimeType, _):
+                    responseText += "[Image: \(mimeType)]\n"
+                case .audio(_, let mimeType):
+                    responseText += "[Audio: \(mimeType)]\n"
+                case .resource(let uri, let mimeType, let text):
+                    responseText += "[Resource: \(uri) (\(mimeType))]\n"
+                    if let text = text {
+                        responseText += text + "\n"
+                    }
+                }
+            }
+            
+            if responseText.isEmpty {
+                responseText = (isError ?? false) ? "Tool execution failed" : "Tool executed successfully"
+            }
+            
+            let message = ChatMessage(
+                text: responseText.trimmingCharacters(in: .whitespacesAndNewlines),
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(message)
+            
+        } catch {
+            let errorMessage = ChatMessage(
+                text: "Tool execution error: \(error.localizedDescription)",
+                isUser: false,
+                timestamp: Date()
+            )
+            messages.append(errorMessage)
         }
     }
 }
-
-

@@ -5,6 +5,7 @@ final class SQLiteLiveStore: ObservableObject {
     @Published var cases: [[String: Any]] = []
     @Published var offers: [[String: Any]] = []
     @Published var emails: [[String: Any]] = []
+    @Published var status: String = "Initializing"
 
     private var db: OpaquePointer?
     private let dbPath: String
@@ -20,9 +21,14 @@ final class SQLiteLiveStore: ObservableObject {
 
     func open() {
         if db != nil { return }
-        if sqlite3_open(dbPath, &db) != SQLITE_OK {
-            print("[SQLiteLiveStore] Failed to open DB at \(dbPath)")
+        let rc = sqlite3_open(dbPath, &db)
+        if rc != SQLITE_OK {
+            let err = db.flatMap { sqlite3_errmsg($0) }.map { String(cString: $0) } ?? "unknown"
+            status = "Open failed: \(err) @ \(dbPath)"
+            print("[SQLiteLiveStore] Failed to open DB at \(dbPath): rc=\(rc) \(err)")
             db = nil
+        } else {
+            status = "Opened: \(dbPath)"
         }
     }
 
@@ -35,9 +41,15 @@ final class SQLiteLiveStore: ObservableObject {
 
     func refreshAll() {
         open()
-        self.cases = fetchAll(from: "cases")
-        self.offers = fetchAll(from: "offers")
-        self.emails = fetchAll(from: "email_communications")
+        let c = fetchAll(from: "cases")
+        let o = fetchAll(from: "offers")
+        let e = fetchAll(from: "email_communications")
+        DispatchQueue.main.async {
+            self.cases = c
+            self.offers = o
+            self.emails = e
+            self.status = "Cases: \(c.count), Offers: \(o.count), Emails: \(e.count)"
+        }
     }
 
     private func fetchAll(from table: String) -> [[String: Any]] {
@@ -47,7 +59,7 @@ final class SQLiteLiveStore: ObservableObject {
         var rows: [[String: Any]] = []
 
         if sqlite3_prepare_v2(db, sql, -1, &statement, nil) != SQLITE_OK {
-            if let cErr = sqlite3_errmsg(db) { print("[SQLiteLiveStore] prepare error: \(String(cString: cErr))") }
+            if let cErr = sqlite3_errmsg(db) { print("[SQLiteLiveStore] prepare error for table \(table): \(String(cString: cErr))") }
             return []
         }
 
