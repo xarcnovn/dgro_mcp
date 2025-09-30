@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useMCPChat } from '@/hooks/useMCPChat';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -8,14 +9,8 @@ interface ChatModalProps {
 }
 
 export function ChatModal({ isOpen, onClose }: ChatModalProps) {
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([
-    {
-      role: 'assistant',
-      content: 'Hello! I\'m here to help you find the right vendors and services. What do you need help with today?',
-    },
-  ]);
+  const { messages, isLoading, sendMessage, clearChat } = useMCPChat();
   const [input, setInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,29 +18,11 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
 
     const userMessage = input.trim();
     setInput('');
-    setMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
-    setIsLoading(true);
-
-    // Mock response for Phase 3 (will be replaced with MCP client in Phase 1)
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: 'assistant',
-          content: 'I understand you need: "' + userMessage + '". Let me search for the best vendors for you. (This is a mock response - MCP integration coming in Phase 1)',
-        },
-      ]);
-      setIsLoading(false);
-    }, 1000);
+    await sendMessage(userMessage);
   };
 
   const handleClose = () => {
-    setMessages([
-      {
-        role: 'assistant',
-        content: 'Hello! I\'m here to help you find the right vendors and services. What do you need help with today?',
-      },
-    ]);
+    clearChat();
     setInput('');
     onClose();
   };

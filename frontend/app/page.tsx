@@ -1,7 +1,9 @@
 import { CasesList } from '@/components/CasesList';
-import { mockCases } from '@/lib/mock-data';
+import { getCases } from '@/lib/api-client';
 
-export default function HomePage() {
+export default async function HomePage() {
+  const cases = await getCases();
+
   return (
     <div>
       <div className="mb-8">
@@ -10,7 +12,7 @@ export default function HomePage() {
           Manage and track your vendor search cases
         </p>
       </div>
-      <CasesList cases={mockCases} />
+      <CasesList cases={cases} />
     </div>
   );
 }
