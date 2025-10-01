@@ -9,7 +9,7 @@ interface ChatModalProps {
 }
 
 export function ChatModal({ isOpen, onClose }: ChatModalProps) {
-  const { messages, isLoading, sendMessage, clearChat } = useMCPChat();
+  const { messages, isLoading, error, sendMessage, clearChat, cleanup } = useMCPChat();
   const [input, setInput] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -21,9 +21,10 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
     await sendMessage(userMessage);
   };
 
-  const handleClose = () => {
+  const handleClose = async () => {
     clearChat();
     setInput('');
+    await cleanup();
     onClose();
   };
 
@@ -43,6 +44,13 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {error && messages.length === 0 && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700">
+              <p className="font-semibold">Configuration Error</p>
+              <p className="text-sm mt-1">{error}</p>
+              <p className="text-sm mt-2">Please restart the Next.js dev server if you just added the API key.</p>
+            </div>
+          )}
           {messages.map((msg, idx) => (
             <div
               key={idx}
