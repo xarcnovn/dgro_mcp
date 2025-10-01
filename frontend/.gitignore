@@ -32,3 +32,14 @@ yarn-error.log*
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# Python cache
+__pycache__/
+
+# Claude Code
+.claude/
