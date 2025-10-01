@@ -15,6 +15,7 @@ export class MCPClient {
   private anthropic: Anthropic;
   private transport: StreamableHTTPClientTransport;
   private tools: Tool[] = [];
+  private systemPrompt: string | null = null;
   private connected: boolean = false;
 
   constructor(baseUrl: string = process.env.NEXT_PUBLIC_MCP_URL || 'http://localhost:8000') {
@@ -27,6 +28,7 @@ export class MCPClient {
       {
         capabilities: {
           tools: {},  // Support tool calls
+          prompts: {}, // Support prompts
         }
       }
     );
@@ -69,6 +71,25 @@ export class MCPClient {
         this.tools.map(({ name }) => name),
       );
 
+      // Retrieve the system prompt from the MCP server
+      try {
+        const promptResult = await this.mcp.getPrompt({
+          name: 'system_prompt',
+          arguments: undefined,
+        });
+
+        // Extract the text content from the prompt messages
+        if (promptResult.messages && promptResult.messages.length > 0) {
+          const message = promptResult.messages[0];
+          if (message.role === 'user' && message.content.type === 'text') {
+            this.systemPrompt = message.content.text;
+            console.log('System prompt retrieved from MCP server');
+          }
+        }
+      } catch (error) {
+        console.warn('Could not retrieve system prompt from MCP server:', error);
+      }
+
       this.connected = true;
     } catch (error) {
       console.error("Failed to connect to MCP server:", error);
@@ -95,12 +116,13 @@ export class MCPClient {
     ];
 
     try {
-      // Initial Claude API call with MCP tools
+      // Initial Claude API call with MCP tools and system prompt
       let response = await this.anthropic.messages.create({
         model: "claude-sonnet-4-0",
         max_tokens: 4000,
         messages,
         tools: this.tools,
+        ...(this.systemPrompt && { system: this.systemPrompt }),
       });
 
       // Process response and handle tool calls
@@ -167,6 +189,7 @@ export class MCPClient {
           max_tokens: 4000,
           messages,
           tools: this.tools,
+          ...(this.systemPrompt && { system: this.systemPrompt }),
         });
       }
 
@@ -189,5 +212,35 @@ export class MCPClient {
       await this.mcp.close();
       this.connected = false;
     }
+  }
+
+  /**
+   * Get the current system prompt
+   */
+  getSystemPrompt(): string | null {
+    return this.systemPrompt;
+  }
+
+  /**
+   * List all available prompts from the MCP server
+   */
+  async listPrompts() {
+    if (!this.connected) {
+      await this.connect();
+    }
+    return await this.mcp.listPrompts();
+  }
+
+  /**
+   * Get a specific prompt by name from the MCP server
+   */
+  async getPrompt(name: string, args?: Record<string, string>) {
+    if (!this.connected) {
+      await this.connect();
+    }
+    return await this.mcp.getPrompt({
+      name,
+      arguments: args,
+    });
   }
 }
