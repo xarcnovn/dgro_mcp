@@ -2112,10 +2112,11 @@ def main():
     # Add CORS middleware - required for browser-based clients
     app = CORSMiddleware(
         app,
-        allow_origins=["http://localhost:3000", "http://localhost:3002"],  # Next.js ports
+        allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],  # Next.js ports
         allow_methods=["GET", "POST", "DELETE"],
         allow_credentials=True,
-        expose_headers=["Mcp-Session-Id"],  # Critical for session management!
+        allow_headers=["*"],  # Allow all headers including custom ones
+        expose_headers=["mcp-session-id", "mcp-protocol-version"],  # Critical for session management (lowercase for browser compatibility)
     )
 
     # Run with uvicorn

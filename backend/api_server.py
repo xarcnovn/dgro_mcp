@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import sqlite3
 from typing import List, Optional, Generator
 import json
+import os
 
 app = FastAPI(title="DGRO API", version="1.0.0")
 
@@ -16,7 +17,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_PATH = "case_search.db"
+DB_PATH = os.path.join(os.path.dirname(__file__), "case_search.db")
 
 # Response Models
 class Case(BaseModel):

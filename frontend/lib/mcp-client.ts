@@ -1,91 +1,25 @@
+import { Anthropic } from "@anthropic-ai/sdk";
+import {
+  MessageParam,
+  Tool,
+} from "@anthropic-ai/sdk/resources/messages/messages.mjs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 /**
- * HTTP Transport for browser-based MCP connections
- * Official SDK handles protocol details, we just provide transport layer
- */
-class HTTPTransport implements Transport {
-  private baseUrl: string;
-  private sessionId: string | null = null;
-  private onMessage?: (message: any) => void;
-  private onError?: (error: Error) => void;
-  private onClose?: () => void;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-  }
-
-  async start(): Promise<void> {
-    // Connection established
-  }
-
-  async send(message: any): Promise<void> {
-    try {
-      const response = await fetch(`${this.baseUrl}/mcp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json, text/event-stream',
-          ...(this.sessionId && { 'Mcp-Session-Id': this.sessionId }),
-        },
-        body: JSON.stringify(message),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Extract and store session ID
-      const newSessionId = response.headers.get('Mcp-Session-Id');
-      if (newSessionId) {
-        this.sessionId = newSessionId;
-      }
-
-      const data = await response.json();
-      if (this.onMessage) {
-        this.onMessage(data);
-      }
-    } catch (error) {
-      if (this.onError) {
-        this.onError(error as Error);
-      }
-      throw error;
-    }
-  }
-
-  async close(): Promise<void> {
-    this.sessionId = null;
-    if (this.onClose) {
-      this.onClose();
-    }
-  }
-
-  setMessageHandler(handler: (message: any) => void): void {
-    this.onMessage = handler;
-  }
-
-  setErrorHandler(handler: (error: Error) => void): void {
-    this.onError = handler;
-  }
-
-  setCloseHandler(handler: () => void): void {
-    this.onClose = handler;
-  }
-}
-
-/**
- * MCP Client using official SDK
- * Handles all protocol details automatically
+ * MCP Client using official SDK with StreamableHTTP transport
+ * Integrates with Claude API to orchestrate tool calls on the MCP server
  */
 export class MCPClient {
-  private client: Client;
-  private transport: HTTPTransport;
+  private mcp: Client;
+  private anthropic: Anthropic;
+  private transport: StreamableHTTPClientTransport;
+  private tools: Tool[] = [];
   private connected: boolean = false;
 
   constructor(baseUrl: string = process.env.NEXT_PUBLIC_MCP_URL || 'http://localhost:8000') {
-    this.transport = new HTTPTransport(baseUrl);
-    this.client = new Client(
+    // Initialize MCP client with metadata
+    this.mcp = new Client(
       {
         name: 'dgro-web-client',
         version: '1.0.0'
@@ -96,43 +30,163 @@ export class MCPClient {
         }
       }
     );
+
+    // Initialize StreamableHTTP transport
+    this.transport = new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`));
+
+    // Initialize Anthropic client
+    const apiKey = process.env.NEXT_PUBLIC_ANTHROPIC_API_KEY;
+    if (!apiKey) {
+      throw new Error("NEXT_PUBLIC_ANTHROPIC_API_KEY is not set");
+    }
+    this.anthropic = new Anthropic({
+      apiKey: apiKey,
+      dangerouslyAllowBrowser: true,
+    });
   }
 
   async connect(): Promise<void> {
-    if (!this.connected) {
-      await this.client.connect(this.transport);
+    if (this.connected) {
+      return;
+    }
+
+    try {
+      // Connect to MCP server (handles initialization automatically)
+      await this.mcp.connect(this.transport);
+
+      // List available tools from the server
+      const toolsResult = await this.mcp.listTools();
+      this.tools = toolsResult.tools.map((tool) => {
+        return {
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.inputSchema,
+        };
+      });
+
+      console.log(
+        "Connected to MCP server with tools:",
+        this.tools.map(({ name }) => name),
+      );
+
       this.connected = true;
+    } catch (error) {
+      console.error("Failed to connect to MCP server:", error);
+      throw error;
     }
   }
 
   async sendMessage(content: string, history: Array<{role: string, content: string}>): Promise<string> {
+    // Ensure we're connected
     if (!this.connected) {
       await this.connect();
     }
 
-    // Call the 'chat' tool on your MCP server
-    const result = await this.client.callTool({
-      name: 'chat',
-      arguments: {
-        message: content,
-        history: history,
-      },
-    });
-
-    // Extract response from tool result
-    if (result.content && result.content.length > 0) {
-      const firstContent = result.content[0];
-      if (firstContent.type === 'text') {
-        return firstContent.text;
+    // Build message history for Claude
+    const messages: MessageParam[] = [
+      ...history.map(msg => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      })),
+      {
+        role: "user" as const,
+        content: content,
       }
-    }
+    ];
 
-    return 'No response';
+    try {
+      // Initial Claude API call with MCP tools
+      let response = await this.anthropic.messages.create({
+        model: "claude-sonnet-4-0",
+        max_tokens: 4000,
+        messages,
+        tools: this.tools,
+      });
+
+      // Process response and handle tool calls
+      const finalText: string[] = [];
+
+      while (response.stop_reason === "tool_use") {
+        // Extract text and tool uses from response
+        for (const content of response.content) {
+          if (content.type === "text") {
+            finalText.push(content.text);
+          }
+        }
+
+        // Collect tool results
+        const toolResults = [];
+
+        for (const content of response.content) {
+          if (content.type === "tool_use") {
+            const toolName = content.name;
+            const toolArgs = content.input as { [x: string]: unknown } | undefined;
+
+            console.log(`Calling tool ${toolName} with args:`, toolArgs);
+
+            try {
+              // Execute tool call on MCP server
+              const result = await this.mcp.callTool({
+                name: toolName,
+                arguments: toolArgs,
+              });
+
+              // Add tool result for Claude
+              toolResults.push({
+                type: "tool_result" as const,
+                tool_use_id: content.id,
+                content: JSON.stringify(result.content),
+              });
+            } catch (error) {
+              console.error(`Tool ${toolName} execution failed:`, error);
+              // Add error as tool result
+              toolResults.push({
+                type: "tool_result" as const,
+                tool_use_id: content.id,
+                content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+                is_error: true,
+              });
+            }
+          }
+        }
+
+        // Continue conversation with tool results
+        messages.push({
+          role: "assistant",
+          content: response.content,
+        });
+
+        messages.push({
+          role: "user",
+          content: toolResults,
+        });
+
+        // Get next response from Claude
+        response = await this.anthropic.messages.create({
+          model: "claude-sonnet-4-0",
+          max_tokens: 4000,
+          messages,
+          tools: this.tools,
+        });
+      }
+
+      // Extract final text response
+      for (const content of response.content) {
+        if (content.type === "text") {
+          finalText.push(content.text);
+        }
+      }
+
+      return finalText.join("\n") || "No response generated";
+    } catch (error) {
+      console.error("Error processing message:", error);
+      throw error;
+    }
   }
 
   async disconnect(): Promise<void> {
     if (this.connected) {
-      await this.client.close();
+      await this.mcp.close();
       this.connected = false;
     }
   }
