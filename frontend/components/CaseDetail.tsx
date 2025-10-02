@@ -10,20 +10,6 @@ interface CaseDetailProps {
   communications: EmailCommunication[];
 }
 
-const statusColors = {
-  new: 'bg-blue-100 text-blue-800',
-  in_progress: 'bg-yellow-100 text-yellow-800',
-  vendor_search: 'bg-purple-100 text-purple-800',
-  negotiation: 'bg-orange-100 text-orange-800',
-  completed: 'bg-green-100 text-green-800',
-};
-
-const urgencyColors = {
-  low: 'text-gray-600',
-  medium: 'text-warning',
-  high: 'text-danger',
-};
-
 export function CaseDetail({ caseData, user, searches, offers, communications }: CaseDetailProps) {
   return (
     <div className="space-y-6">
@@ -31,44 +17,42 @@ export function CaseDetail({ caseData, user, searches, offers, communications }:
       <div className="bg-white border border-gray-200 rounded-lg p-6">
         <div className="flex justify-between items-start mb-4">
           <h1 className="text-2xl font-bold text-gray-900">
-            Case #{caseData.id}
+            {caseData.subject}
           </h1>
-          <span
-            className={`px-3 py-1 text-sm font-medium rounded-full ${
-              statusColors[caseData.status]
-            }`}
-          >
-            {caseData.status.replace('_', ' ')}
+          <span className="px-3 py-1 text-sm font-medium rounded-full bg-blue-100 text-blue-800">
+            {caseData.location}
           </span>
+        </div>
+
+        <div className="mb-4">
+          <span className="text-sm text-gray-500">Case ID</span>
+          <p className="text-base font-medium">#{caseData.id}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
-            <span className="text-sm text-gray-500">Category</span>
-            <p className="text-base font-medium">{caseData.category}</p>
-          </div>
-          <div>
-            <span className="text-sm text-gray-500">Urgency</span>
-            <p className={`text-base font-medium ${urgencyColors[caseData.urgency]}`}>
-              {caseData.urgency.toUpperCase()}
+            <span className="text-sm text-gray-500">Budget</span>
+            <p className="text-base font-medium text-primary">
+              ${caseData.budget.toLocaleString()}
             </p>
           </div>
           <div>
-            <span className="text-sm text-gray-500">Budget Range</span>
-            <p className="text-base font-medium">{caseData.budget_range || 'Not specified'}</p>
-          </div>
-          <div>
-            <span className="text-sm text-gray-500">Created</span>
-            <p className="text-base font-medium">
-              {new Date(caseData.created_at).toLocaleString()}
-            </p>
+            <span className="text-sm text-gray-500">Timeline</span>
+            <p className="text-base font-medium">{caseData.timeline}</p>
           </div>
         </div>
 
-        <div>
-          <span className="text-sm text-gray-500">Details</span>
-          <p className="text-base mt-1">{caseData.details}</p>
+        <div className="mb-4">
+          <span className="text-sm text-gray-500">Features & Requirements</span>
+          <p className="text-base mt-1">{caseData.features}</p>
         </div>
+
+        {caseData.additional_features && (
+          <div>
+            <span className="text-sm text-gray-500">Additional Features</span>
+            <p className="text-base mt-1">{caseData.additional_features}</p>
+          </div>
+        )}
       </div>
 
       {/* User Info Card */}
@@ -84,10 +68,6 @@ export function CaseDetail({ caseData, user, searches, offers, communications }:
             <p className="text-base font-medium">{user.email}</p>
           </div>
           <div>
-            <span className="text-sm text-gray-500">Company</span>
-            <p className="text-base font-medium">{user.company}</p>
-          </div>
-          <div>
             <span className="text-sm text-gray-500">Phone</span>
             <p className="text-base font-medium">{user.phone || 'Not provided'}</p>
           </div>
@@ -101,10 +81,8 @@ export function CaseDetail({ caseData, user, searches, offers, communications }:
           <div className="space-y-3">
             {searches.map((search) => (
               <div key={search.id} className="border-l-4 border-primary pl-4">
-                <p className="text-sm font-medium text-gray-900">{search.query}</p>
-                <p className="text-xs text-gray-500">
-                  {new Date(search.timestamp).toLocaleString()}
-                </p>
+                <p className="text-xs text-gray-500 mb-1">{search.search_goal}</p>
+                <p className="text-sm font-medium text-gray-900">{search.search_query}</p>
               </div>
             ))}
           </div>

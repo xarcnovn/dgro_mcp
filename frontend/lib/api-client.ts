@@ -1,8 +1,7 @@
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
-export async function getCases(status?: string) {
-  const url = status ? `${API_BASE_URL}/api/cases?status=${status}` : `${API_BASE_URL}/api/cases`;
-  const res = await fetch(url);
+export async function getCases() {
+  const res = await fetch(`${API_BASE_URL}/api/cases`);
   if (!res.ok) throw new Error('Failed to fetch cases');
   return res.json();
 }

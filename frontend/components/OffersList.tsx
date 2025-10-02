@@ -6,8 +6,10 @@ interface OffersListProps {
 
 const statusColors = {
   pending: 'bg-yellow-100 text-yellow-800',
+  active: 'bg-blue-100 text-blue-800',
   accepted: 'bg-green-100 text-green-800',
   rejected: 'bg-red-100 text-red-800',
+  expired: 'bg-gray-100 text-gray-800',
 };
 
 export function OffersList({ offers }: OffersListProps) {
@@ -31,13 +33,16 @@ export function OffersList({ offers }: OffersListProps) {
               Price
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Details
+              Timeline
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Accuracy
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Status
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Received
+              Created
             </th>
             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               Actions
@@ -46,15 +51,18 @@ export function OffersList({ offers }: OffersListProps) {
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
           {offers.map((offer) => (
-            <tr key={offer.id}>
+            <tr key={offer.offer_id}>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {offer.vendor_email}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {offer.price_quoted ? `$${offer.price_quoted.toLocaleString()}` : 'N/A'}
+                {offer.price ? `$${offer.price.toLocaleString()}` : 'N/A'}
               </td>
-              <td className="px-6 py-4 text-sm text-gray-700">
-                {offer.details}
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                {offer.timeline}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                {(offer.accuracy * 100).toFixed(0)}%
               </td>
               <td className="px-6 py-4 whitespace-nowrap">
                 <span
@@ -66,10 +74,10 @@ export function OffersList({ offers }: OffersListProps) {
                 </span>
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                {new Date(offer.received_at).toLocaleString()}
+                {new Date(offer.created_at).toLocaleString()}
               </td>
               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                {offer.status === 'pending' && (
+                {(offer.status === 'pending' || offer.status === 'active') && (
                   <div className="flex space-x-2">
                     <button className="text-success hover:text-green-700">
                       Accept
