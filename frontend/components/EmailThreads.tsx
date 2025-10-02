@@ -88,26 +88,36 @@ export function EmailThreads({ communications }: EmailThreadsProps) {
                   <div
                     key={email.id}
                     className={`p-4 ${
-                      email.direction === 'sent' ? 'bg-blue-50' : 'bg-gray-50'
+                      email.email_type === 'initial_outreach' || email.email_type === 'reply'
+                        ? 'bg-blue-50'
+                        : 'bg-gray-50'
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <span
-                        className={`text-xs font-medium px-2 py-1 rounded ${
-                          email.direction === 'sent'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-200 text-gray-700'
-                        }`}
-                      >
-                        {email.direction === 'sent' ? 'Sent' : 'Received'}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`text-xs font-medium px-2 py-1 rounded ${
+                            email.email_type === 'initial_outreach' || email.email_type === 'reply'
+                              ? 'bg-blue-100 text-blue-800'
+                              : 'bg-gray-200 text-gray-700'
+                          }`}
+                        >
+                          {email.email_type}
+                        </span>
+                        {email.vendor_name && (
+                          <span className="text-xs text-gray-600">
+                            {email.vendor_name}
+                          </span>
+                        )}
+                      </div>
                       <span className="text-xs text-gray-500">
-                        {new Date(email.timestamp).toLocaleString()}
+                        {new Date(email.sent_at).toLocaleString()}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {email.body}
-                    </p>
+                    <div
+                      className="text-sm text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: email.email_content }}
+                    />
                   </div>
                 ))}
               </div>

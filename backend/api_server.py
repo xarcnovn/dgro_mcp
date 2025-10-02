@@ -19,50 +19,56 @@ app.add_middleware(
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "case_search.db")
 
-# Response Models
+# Response Models (aligned with MCP server schema)
 class Case(BaseModel):
     id: int
-    user_id: int
-    status: str
-    category: str
-    details: str
-    urgency: str
-    budget_range: Optional[str] = None
-    created_at: str
-    updated_at: str
+    subject: str
+    features: str
+    location: str
+    budget: float
+    timeline: str
+    additional_features: Optional[str] = None
 
 class User(BaseModel):
     id: int
+    case_id: int
     name: str
     email: str
-    company: str
     phone: Optional[str] = None
 
 class Search(BaseModel):
     id: int
     case_id: int
-    query: str
-    timestamp: str
-    results_json: str
+    search_goal: str
+    search_query: str
+    search_results: str
 
 class Offer(BaseModel):
-    id: int
+    offer_id: int
     case_id: int
-    vendor_email: str
-    price_quoted: Optional[float] = None
-    details: str
     status: str
-    received_at: str
+    price: Optional[float] = None
+    timeline: str
+    accuracy: float
+    additional_details: Optional[str] = None
+    communication_thread_id: Optional[str] = None
+    vendor_email: str
+    created_at: str
+    updated_at: str
 
 class EmailCommunication(BaseModel):
     id: int
     case_id: int
     vendor_email: str
+    vendor_name: Optional[str] = None
+    vendor_website: Optional[str] = None
     subject: str
-    body: str
-    direction: str
-    timestamp: str
+    message_id: Optional[str] = None
     thread_id: Optional[str] = None
+    email_type: str
+    email_content: str
+    sent_at: str
+    status: Optional[str] = None
 
 # Initialize database with optimal settings
 def init_db():
@@ -96,20 +102,12 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
 # Endpoints with proper error handling and connection management
 @app.get("/api/cases", response_model=List[Case])
 def get_cases(
-    status: Optional[str] = None,
     db: sqlite3.Connection = Depends(get_db)
 ):
-    """Get all cases, optionally filtered by status"""
+    """Get all cases"""
     try:
         cursor = db.cursor()
-        if status:
-            cursor.execute(
-                "SELECT * FROM cases WHERE status = ? ORDER BY created_at DESC",
-                (status,)
-            )
-        else:
-            cursor.execute("SELECT * FROM cases ORDER BY created_at DESC")
-
+        cursor.execute("SELECT id, subject, features, location, budget, timeline, additional_features FROM cases ORDER BY id DESC")
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
     except sqlite3.Error as e:
@@ -123,7 +121,7 @@ def get_case(
     """Get single case by ID"""
     try:
         cursor = db.cursor()
-        cursor.execute("SELECT * FROM cases WHERE id = ?", (case_id,))
+        cursor.execute("SELECT id, subject, features, location, budget, timeline, additional_features FROM cases WHERE id = ?", (case_id,))
         row = cursor.fetchone()
 
         if not row:
@@ -142,7 +140,7 @@ def get_searches(
     try:
         cursor = db.cursor()
         cursor.execute(
-            "SELECT * FROM searches WHERE case_id = ? ORDER BY timestamp DESC",
+            "SELECT id, case_id, search_goal, search_query, search_results FROM searches WHERE case_id = ? ORDER BY id DESC",
             (case_id,)
         )
         rows = cursor.fetchall()
@@ -159,7 +157,7 @@ def get_offers(
     try:
         cursor = db.cursor()
         cursor.execute(
-            "SELECT * FROM offers WHERE case_id = ? ORDER BY received_at DESC",
+            "SELECT offer_id, case_id, status, price, timeline, accuracy, additional_details, communication_thread_id, vendor_email, created_at, updated_at FROM offers WHERE case_id = ? ORDER BY created_at DESC",
             (case_id,)
         )
         rows = cursor.fetchall()
@@ -176,7 +174,7 @@ def get_communications(
     try:
         cursor = db.cursor()
         cursor.execute(
-            "SELECT * FROM email_communications WHERE case_id = ? ORDER BY timestamp DESC",
+            "SELECT id, case_id, vendor_email, vendor_name, vendor_website, subject, message_id, thread_id, email_type, email_content, sent_at, status FROM email_communications WHERE case_id = ? ORDER BY sent_at DESC",
             (case_id,)
         )
         rows = cursor.fetchall()
@@ -192,11 +190,10 @@ def get_user_by_case(
     """Get user info for a case"""
     try:
         cursor = db.cursor()
-        cursor.execute("""
-            SELECT u.* FROM users u
-            JOIN cases c ON c.user_id = u.id
-            WHERE c.id = ?
-        """, (case_id,))
+        cursor.execute(
+            "SELECT id, case_id, name, email, phone FROM users WHERE case_id = ?",
+            (case_id,)
+        )
         row = cursor.fetchone()
 
         if not row:

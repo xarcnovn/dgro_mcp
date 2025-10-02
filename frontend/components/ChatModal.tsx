@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMCPChat } from '@/hooks/useMCPChat';
+import ReactMarkdown from 'react-markdown';
 
 interface ChatModalProps {
   isOpen: boolean;
@@ -63,7 +64,32 @@ export function ChatModal({ isOpen, onClose }: ChatModalProps) {
                     : 'bg-gray-100 text-gray-900'
                 }`}
               >
-                {msg.content}
+                {msg.role === 'user' ? (
+                  msg.content
+                ) : (
+                  <ReactMarkdown
+                    components={{
+                      p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                      ul: ({ children }) => <ul className="list-disc ml-4 mb-2 space-y-1">{children}</ul>,
+                      ol: ({ children }) => <ol className="list-decimal ml-4 mb-2 space-y-1">{children}</ol>,
+                      li: ({ children }) => <li className="ml-1">{children}</li>,
+                      h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
+                      h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
+                      h3: ({ children }) => <h3 className="text-sm font-bold mb-1">{children}</h3>,
+                      code: ({ className, children }) => {
+                        const isInline = !className;
+                        return isInline ? (
+                          <code className="bg-gray-200 px-1 py-0.5 rounded text-sm">{children}</code>
+                        ) : (
+                          <code className="block bg-gray-200 p-2 rounded text-sm overflow-x-auto">{children}</code>
+                        );
+                      },
+                      pre: ({ children }) => <pre className="mb-2">{children}</pre>,
+                    }}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                )}
               </div>
             </div>
           ))}
