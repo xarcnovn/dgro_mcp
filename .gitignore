@@ -16,6 +16,10 @@ venv.bak/
 *.db
 *.sqlite3
 
+# Secrets and credentials
+credentials.json
+token.pickle
+
 # IDE
 .idea/
 .vscode/
