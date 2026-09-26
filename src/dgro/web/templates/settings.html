@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+<p class="muted">Configured through environment variables or a <span class="mono">.env</span> file in the folder you start dgro from. Restart after changing them.</p>
+
+<div class="grid-2" style="align-items:start">
+  <div class="card">
+    <h2>AI</h2>
+    <dl class="kv">
+      <dt>Backend</dt><dd>{% if llm_name == 'anthropic' %}Claude API{% else %}<span class="badge amber">Demo (simulated)</span>{% endif %}</dd>
+      <dt>Model</dt><dd class="mono">{{ settings.model }}</dd>
+      <dt>API key</dt><dd>{{ 'set' if settings.anthropic_api_key else 'from environment / ant profile' if llm_name == 'anthropic' else 'not set' }}</dd>
+      <dt>Refusal fallback</dt><dd>{{ 'on' if settings.refusal_fallback else 'off' }}</dd>
+      <dt>Web searches / run</dt><dd>up to {{ settings.web_search_max_uses }}</dd>
+      <dt>Vendors / search</dt><dd>up to {{ settings.max_vendors }}</dd>
+    </dl>
+    <p class="muted" style="font-size:.85rem;margin-top:.75rem"><span class="mono">ANTHROPIC_API_KEY</span>, <span class="mono">DGRO_MODEL</span>, <span class="mono">DGRO_LLM=anthropic|fake</span></p>
+  </div>
+
+  <div class="card">
+    <h2>Email</h2>
+    <dl class="kv">
+      <dt>Mode</dt><dd>{% if mail_name == 'sandbox' %}<span class="badge amber">Sandbox - nothing is sent</span>{% else %}<span class="badge green">Live SMTP/IMAP</span>{% endif %}</dd>
+      <dt>Sender</dt><dd class="mono">{{ settings.sender_address or '(case contact email)' }}</dd>
+      {% if mail_name != 'sandbox' %}
+      <dt>SMTP</dt><dd class="mono">{{ settings.smtp_host }}:{{ settings.smtp_port }} ({{ settings.smtp_security }})</dd>
+      <dt>IMAP</dt><dd class="mono">{{ settings.imap_host or 'not configured' }}{% if settings.imap_host %}:{{ settings.imap_port }} / {{ settings.imap_folder }}{% endif %}</dd>
+      <dt>Inbox check</dt><dd>every {{ settings.inbox_poll_seconds }} s</dd>
+      <dt>Test redirect</dt><dd class="mono">{{ settings.email_redirect_to or 'off' }}</dd>
+      {% else %}
+      <dt>Outbox</dt><dd class="mono">{{ settings.outbox_dir }}</dd>
+      {% endif %}
+    </dl>
+    <form method="post" action="/settings/test-email" style="margin-top:.75rem">
+      <button class="btn small" type="submit">Test email connection</button>
+    </form>
+    {% if checks %}
+      <ul class="list-plain" style="margin-top:.75rem">
+      {% for ok, text in checks %}<li style="color:{{ 'var(--success)' if ok else 'var(--danger)' }}">{{ '✓' if ok else '✗' }} {{ text }}</li>{% endfor %}
+      </ul>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <h2>Requester defaults</h2>
+  <dl class="kv">
+    <dt>Name</dt><dd>{{ settings.requester_name or '—' }}</dd>
+    <dt>Email</dt><dd>{{ settings.requester_email or '—' }}</dd>
+    <dt>Phone</dt><dd>{{ settings.requester_phone or '—' }}</dd>
+    <dt>Company</dt><dd>{{ settings.requester_company or '—' }}</dd>
+  </dl>
+  <p class="muted" style="font-size:.85rem;margin-top:.75rem">Used to pre-fill new cases: <span class="mono">DGRO_REQUESTER_NAME</span>, <span class="mono">_EMAIL</span>, <span class="mono">_PHONE</span>, <span class="mono">_COMPANY</span>.</p>
+</div>
+{% endblock %}

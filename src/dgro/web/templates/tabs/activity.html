@@ -1,0 +1,32 @@
+<div class="grid-2" style="grid-template-columns: 3fr 2fr; align-items:start">
+  <div class="card">
+    <h2>Timeline</h2>
+    {% if not case.events %}<p class="muted">Nothing yet.</p>{% endif %}
+    <ul class="timeline">
+      {% for e in case.events | reverse %}
+        <li><span class="dot {{ e.level }}"></span><time datetime="{{ e.created_at.isoformat() }}Z">{{ e.created_at | local_time('%d %b %H:%M') }}</time><span>{{ e.message }}</span></li>
+      {% endfor %}
+    </ul>
+  </div>
+  <div class="card">
+    <h2>Background steps</h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Step</th><th>Status</th><th>When</th></tr></thead>
+      <tbody>
+      {% for j in case.jobs | reverse %}
+        {% if loop.index <= 40 %}
+        <tr>
+          <td>{{ j.label }}{% if j.error %}<div class="muted" style="font-size:.78rem">{{ j.error[:200] }}</div>{% endif %}</td>
+          <td><span class="badge {{ {'succeeded':'green','failed':'red','running':'blue','queued':'amber'}.get(j.status, '') }}">{{ j.status }}</span>
+            {% if j.attempts > 1 %}<div class="muted" style="font-size:.75rem">{{ j.attempts }} attempts</div>{% endif %}</td>
+          <td class="nowrap muted" style="font-size:.8rem">{{ (j.finished_at or j.started_at or j.created_at) | ago }}
+            {% if j.status == 'failed' %}
+            <form method="post" action="/cases/{{ case.id }}/jobs/{{ j.id }}/retry?tab=activity" class="inline"><button class="btn small link" type="submit">Retry</button></form>
+            {% endif %}</td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+</div>

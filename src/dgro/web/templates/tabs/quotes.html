@@ -1,0 +1,151 @@
+{% set comparing = busy | selectattr('kind', 'equalto', 'compare_quotes') | list %}
+{% set rec = case.recommendation %}
+{% set quotes = case.quotes | rejectattr('vendor.excluded') | list %}
+{% set priced = quotes | selectattr('total_price', 'ne', none) | sort(attribute='total_price') | list %}
+{% set unpriced = quotes | selectattr('total_price', 'none') | list %}
+{% set ordered = priced + unpriced %}
+
+{% if case.status == 'decided' %}
+  {% set chosen = vendor_by_id.get(case.chosen_vendor_id) %}
+  <div class="card" style="border-color:var(--success)">
+    <div class="row between">
+      <div>
+        <h2>✓ You chose {{ chosen.name if chosen else 'a vendor' }}</h2>
+        <p class="muted" style="margin:0">Let everyone know: Claude drafts an acceptance for {{ chosen.name if chosen else 'them' }} and short, polite declines for the others. You approve each one.</p>
+      </div>
+      <div class="actions">
+        <form method="post" action="/cases/{{ case.id }}/decision-emails" class="inline"><button class="btn primary" type="submit">Draft acceptance &amp; declines</button></form>
+        <form method="post" action="/cases/{{ case.id }}/state" class="inline"><input type="hidden" name="status" value="closed"><button class="btn" type="submit">Close case</button></form>
+        <form method="post" action="/cases/{{ case.id }}/state" class="inline"><input type="hidden" name="status" value="open"><button class="btn link" type="submit" data-confirm="Undo the decision and reopen the case?">Undo choice</button></form>
+      </div>
+    </div>
+  </div>
+{% elif case.status == 'closed' %}
+  <div class="card row between">
+    <span>This case is closed.</span>
+    <form method="post" action="/cases/{{ case.id }}/state" class="inline"><input type="hidden" name="status" value="open"><button class="btn" type="submit">Reopen case</button></form>
+  </div>
+{% endif %}
+
+<div class="card">
+  <div class="card-title">
+    <div>
+      <h2>Offers</h2>
+      <p class="muted" style="margin:0;font-size:.88rem">Extracted from vendor replies. Prices are totals as stated by the vendor - check what each one includes.</p>
+    </div>
+    {% if quotes %}
+    <form method="post" action="/cases/{{ case.id }}/compare" class="inline">
+      <button class="btn {{ 'primary' if not rec or rec.offer_count != (case.quotes | length) }}" type="submit" {{ 'disabled' if comparing }}>
+        {% if comparing %}<span class="spinner"></span> Comparing…{% elif rec %}Compare again{% else %}Compare with Claude{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+
+  {% if not quotes %}
+    <div class="empty">
+      <p>No offers yet. They appear here automatically when vendors reply with prices{% if mail_name == 'sandbox' %} (paste replies on the Outreach tab){% endif %}.</p>
+    </div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Vendor</th><th>Price</th><th>Timeline</th><th>Covers</th><th>Fit</th><th></th></tr></thead>
+      <tbody>
+      {% for q in ordered %}
+        {% set v = q.vendor %}
+        <tr class="{{ 'chosen' if q.status == 'accepted' }} {{ 'recommended' if rec and rec.recommended_vendor_id == v.id }} {{ 'muted-row' if q.status == 'rejected' }}">
+          <td style="min-width:170px">
+            <strong>{{ v.name }}</strong>
+            {% if rec and rec.recommended_vendor_id == v.id %}<div><span class="badge blue">Recommended</span></div>{% endif %}
+            {% if q.status == 'accepted' %}<div><span class="badge green">Chosen</span></div>{% endif %}
+            {% if q.source == 'manual' %}<div class="muted" style="font-size:.78rem">entered manually</div>{% endif %}
+          </td>
+          <td class="nowrap">
+            <strong>{{ money(q.total_price, q.currency) }}</strong>
+            <div class="muted" style="font-size:.8rem">{{ q.price_basis if q.price_basis != 'unknown' else '' }}</div>
+            {% if q.price_text %}<div class="muted" style="font-size:.78rem;max-width:220px;white-space:normal">“{{ q.price_text }}”</div>{% endif %}
+          </td>
+          <td style="max-width:180px">{{ q.timeline or '—' }}
+            {% if q.valid_until %}<div class="muted" style="font-size:.8rem">valid: {{ q.valid_until }}</div>{% endif %}</td>
+          <td style="max-width:320px;font-size:.85rem">
+            {% if q.includes %}<div>✓ {{ q.includes | join(', ') }}</div>{% endif %}
+            {% if q.excludes %}<div class="muted">✗ {{ q.excludes | join(', ') }}</div>{% endif %}
+            {% if q.conditions %}<div class="muted">{{ q.conditions }}</div>{% endif %}
+            {% if q.missing_info %}<div style="color:var(--warning)">Missing: {{ q.missing_info | join(', ') }}</div>{% endif %}
+            {% if not (q.includes or q.excludes or q.conditions or q.missing_info) %}<span class="muted">{{ q.summary or '—' }}</span>{% endif %}
+          </td>
+          <td class="nowrap">
+            {% if q.fit_score is not none %}<span class="score"><span style="width:{{ q.fit_score }}%"></span></span>{{ q.fit_score }}{% else %}—{% endif %}
+          </td>
+          <td class="nowrap" style="text-align:right">
+            {% if case.status == 'open' %}
+            <form method="post" action="/cases/{{ case.id }}/choose/{{ v.id }}" class="inline">
+              <button class="btn small" type="submit" data-confirm="Choose {{ v.name }}?">Choose</button>
+            </form>
+            {% endif %}
+            <a class="btn small link" href="?tab=outreach#thread-{{ v.id }}">Thread</a>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if rec %}
+<div class="card">
+  <div class="card-title">
+    <h2>Claude's recommendation</h2>
+    <span class="muted" style="font-size:.8rem">
+      based on {{ rec.offer_count }} offer(s){% if rec.offer_count != (case.quotes | length) %} · <span style="color:var(--warning)">new offers since - compare again</span>{% endif %}
+    </span>
+  </div>
+  <p><strong>{{ rec.headline }}</strong></p>
+  <p>{{ rec.rationale }}</p>
+  <div class="grid-2">
+    <div>
+      <h3>Ranking</h3>
+      <ol class="list-plain">
+      {% for r in rec.ranking %}
+        {% set rv = vendor_by_id.get(r.vendor_id) %}
+        <li><strong>{{ rv.name if rv else ('vendor #' ~ r.vendor_id) }}</strong>
+          {% if r.pros %}<div style="font-size:.85rem;color:var(--success)">+ {{ r.pros | join('; ') }}</div>{% endif %}
+          {% if r.cons %}<div style="font-size:.85rem;color:var(--danger)">− {{ r.cons | join('; ') }}</div>{% endif %}
+        </li>
+      {% endfor %}
+      </ol>
+    </div>
+    <div>
+      {% if rec.risks %}<h3>Risks</h3><ul class="list-plain">{% for r in rec.risks %}<li>{{ r }}</li>{% endfor %}</ul>{% endif %}
+      {% if rec.next_steps %}<h3 style="margin-top:.75rem">Next steps</h3><ul class="list-plain">{% for s in rec.next_steps %}<li>{{ s }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if case.active_vendors %}
+<div class="card">
+  <details>
+    <summary>Enter an offer manually (phone call, PDF, meeting…)</summary>
+    <form method="post" action="/cases/{{ case.id }}/quotes">
+      <div class="grid-3">
+        <div class="field"><label for="q-vendor">Vendor</label>
+          <select id="q-vendor" name="vendor_id" required>
+            {% for v in case.active_vendors %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+          </select></div>
+        <div class="field"><label for="q-price">Total price</label><input type="text" id="q-price" name="total_price" inputmode="decimal" placeholder="18500"></div>
+        <div class="field"><label for="q-currency">Currency</label><input type="text" id="q-currency" name="currency" maxlength="3" placeholder="PLN" value="{{ (case.quotes | map(attribute='currency') | select | first) or '' }}"></div>
+        <div class="field"><label for="q-basis">Price type</label>
+          <select id="q-basis" name="price_basis">
+            <option value="fixed">fixed</option><option value="estimate">estimate</option><option value="range">range</option>
+            <option value="hourly">hourly</option><option value="per_unit">per unit</option>
+          </select></div>
+        <div class="field"><label for="q-timeline">Timeline</label><input type="text" id="q-timeline" name="timeline" placeholder="start 3 Nov, 3 weeks"></div>
+        <div class="field"><label for="q-notes">Notes</label><input type="text" id="q-notes" name="notes" placeholder="includes materials"></div>
+      </div>
+      <button class="btn" type="submit">Save offer</button>
+    </form>
+  </details>
+</div>
+{% endif %}

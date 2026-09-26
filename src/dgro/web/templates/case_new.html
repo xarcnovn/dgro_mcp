@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}New case{% endblock %}
+{% block content %}
+<div style="max-width:760px">
+  <h1>New case</h1>
+  <p class="muted">Describe what you need in your own words. Claude turns it into a brief you can check before
+    anything is sent to vendors.</p>
+  {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+  <form method="post" action="/cases" class="card">
+    <div class="field">
+      <label for="request_text">What do you need a quote for?</label>
+      <textarea id="request_text" name="request_text" class="tall" required minlength="10"
+        placeholder="e.g. Renovation of a 9 m² bathroom in Kraków: remove old tiles, new tiles (~30 m²), walk-in shower, install toilet and sink. I'll buy the tiles myself. Would like to start in November.">{{ form.request_text or '' }}</textarea>
+    </div>
+    <div class="grid-3">
+      <div class="field">
+        <label for="location">Location <span class="hint">(city or address area)</span></label>
+        <input type="text" id="location" name="location" value="{{ form.location or '' }}" placeholder="Kraków">
+      </div>
+      <div class="field">
+        <label for="budget">Budget <span class="hint">(optional)</span></label>
+        <input type="text" id="budget" name="budget" value="{{ form.budget or '' }}" placeholder="up to 20 000 PLN">
+      </div>
+      <div class="field">
+        <label for="deadline">Timing <span class="hint">(optional)</span></label>
+        <input type="text" id="deadline" name="deadline" value="{{ form.deadline or '' }}" placeholder="start in November">
+      </div>
+    </div>
+    <details {{ 'open' if not settings.requester_email }}>
+      <summary>Your contact details (used to sign emails to vendors)</summary>
+      <div class="grid-2">
+        <div class="field">
+          <label for="contact_name">Name</label>
+          <input type="text" id="contact_name" name="contact_name" value="{{ form.contact_name or settings.requester_name }}">
+        </div>
+        <div class="field">
+          <label for="contact_email">Email</label>
+          <input type="email" id="contact_email" name="contact_email" value="{{ form.contact_email or settings.requester_email }}">
+        </div>
+        <div class="field">
+          <label for="contact_phone">Phone</label>
+          <input type="tel" id="contact_phone" name="contact_phone" value="{{ form.contact_phone or settings.requester_phone }}">
+        </div>
+        <div class="field">
+          <label for="contact_company">Company <span class="hint">(optional)</span></label>
+          <input type="text" id="contact_company" name="contact_company" value="{{ form.contact_company or settings.requester_company }}">
+        </div>
+      </div>
+      <p class="muted" style="font-size:.85rem">Set defaults with DGRO_REQUESTER_NAME / _EMAIL / _PHONE in <span class="mono">.env</span>.</p>
+    </details>
+    <div class="actions">
+      <button class="btn primary" type="submit">Create case &amp; draft brief</button>
+      <a class="btn" href="/">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

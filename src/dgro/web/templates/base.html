@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}dgro{% endblock %} · dgro quotes</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%234050d8'/><text x='16' y='22' font-family='Arial' font-weight='700' font-size='16' fill='white' text-anchor='middle'>dq</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <div class="container inner">
+      <a class="brand" href="/">dgro<span>·</span>quotes</a>
+      <nav>
+        <a href="/" class="{{ 'active' if request.url.path == '/' or request.url.path.startswith('/cases/') and request.url.path != '/cases/new' }}">Cases</a>
+        <a href="/cases/new" class="{{ 'active' if request.url.path == '/cases/new' }}">New case</a>
+        <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') }}">Settings</a>
+      </nav>
+      <span class="mode-pill" title="AI backend · email mode">
+        {{ 'Claude ' ~ settings.model if llm_name == 'anthropic' else 'Demo AI' }} · {{ 'email: sandbox' if mail_name == 'sandbox' else 'email: live' }}
+      </span>
+    </div>
+  </header>
+  <main class="container">
+    {% if llm_name == 'fake' %}
+    <div class="banner demo">
+      <strong>Demo mode:</strong> no <span class="mono">ANTHROPIC_API_KEY</span> found, so AI steps return simulated
+      results and demo vendors. Add a key to <span class="mono">.env</span> and restart to use Claude.
+    </div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="foot container">dgro runs locally · data in <span class="mono">{{ settings.data_dir }}</span></footer>
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

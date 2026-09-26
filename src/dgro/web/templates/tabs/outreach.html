@@ -1,0 +1,185 @@
+{% set drafts = case.draft_messages %}
+{% set rfq_busy = busy | selectattr('kind', 'equalto', 'draft_rfq') | list %}
+{% set uncontacted = case.active_vendors | rejectattr('has_rfq') | selectattr('email') | list %}
+{% set threads = case.vendors | selectattr('thread') | list %}
+
+{% if mail_name == 'sandbox' %}
+<div class="banner warning">
+  <strong>Sandbox email:</strong> approved emails are <em>not</em> sent - they are saved to
+  <span class="mono">{{ settings.outbox_dir }}</span>. Paste vendor replies into a thread to continue the flow.
+  Set <span class="mono">DGRO_EMAIL_MODE=smtp</span> to send for real.
+</div>
+{% else %}
+<div class="banner info row between">
+  <span><strong>Live email:</strong> approved emails are sent from <span class="mono">{{ settings.sender_address or case.contact_email }}</span>
+    {% if settings.email_redirect_to %}(test redirect to <span class="mono">{{ settings.email_redirect_to }}</span>){% endif %}.
+    {% if can_receive %}Replies are collected every {{ (settings.inbox_poll_seconds // 60) or 1 }} min.{% else %}IMAP not configured: paste replies manually.{% endif %}</span>
+  {% if can_receive %}
+  <form method="post" action="/cases/{{ case.id }}/inbox" class="inline"><button class="btn small" type="submit">Check inbox now</button></form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if drafts %}
+<div class="card" id="drafts">
+  <div class="card-title">
+    <div>
+      <h2>Drafts awaiting your approval <span class="badge amber">{{ drafts | length }}</span></h2>
+      <p class="muted" style="margin:0;font-size:.88rem">Nothing is sent until you approve it. Edit anything you like.</p>
+    </div>
+    <form method="post" action="/cases/{{ case.id }}/messages/send-all" class="inline">
+      <button class="btn primary" type="submit" data-confirm="Send {{ drafts | length }} email(s) now?">Approve &amp; send all ({{ drafts | length }})</button>
+    </form>
+  </div>
+  {% for m in drafts %}
+  <form method="post" action="/cases/{{ case.id }}/messages/{{ m.id }}" class="msg draft" data-track>
+    <div class="msg-meta">
+      <span><strong>{{ m.vendor.name if m.vendor else '' }}</strong> · {{ 'quote request' if m.kind == 'rfq' else 'reply' }}</span>
+      <span>drafted {{ m.created_at | ago }}</span>
+    </div>
+    <div class="grid-2" style="grid-template-columns: 1fr 2fr">
+      <div class="field"><label>To</label><input type="email" name="to_addr" value="{{ m.to_addr or (m.vendor.email if m.vendor else '') }}"></div>
+      <div class="field"><label>Subject</label><input type="text" name="subject" value="{{ m.subject }}"></div>
+    </div>
+    <div class="field"><label>Message</label><textarea name="body" class="tall">{{ m.body }}</textarea></div>
+    {% if '[TODO' in m.body %}<p class="banner warning" style="margin:.25rem 0 .5rem">Fill in the [TODO: …] placeholders before sending.</p>{% endif %}
+    <div class="actions">
+      <button class="btn primary small" type="submit" name="op" value="send">Approve &amp; send</button>
+      <button class="btn small" type="submit" name="op" value="save">Save</button>
+      <button class="btn small danger" type="submit" name="op" value="discard" data-confirm="Discard this draft?">Discard</button>
+    </div>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" id="template">
+  <details {{ 'open' if not case.sent_messages }}>
+    <summary style="font-size:1rem;color:var(--text)">Quote request email {% if case.sent_messages %}<span class="muted">(sent to {{ case.sent_messages | selectattr('kind', 'equalto', 'rfq') | list | length }} vendor(s))</span>{% endif %}</summary>
+    {% if rfq_busy %}
+      <p class="busy-bar muted"><span class="spinner"></span> Claude is writing the quote request…</p>
+    {% elif case.brief_status != 'confirmed' %}
+      <p class="muted">Confirm the brief first.</p>
+    {% endif %}
+    <form method="post" action="/cases/{{ case.id }}/rfq" data-track>
+      <p class="muted" style="font-size:.85rem">One email for all vendors. <span class="mono">{vendor_name}</span> is replaced with each vendor's name.</p>
+      <div class="field"><label for="rfq_subject">Subject</label>
+        <input type="text" id="rfq_subject" name="rfq_subject" value="{{ case.rfq_subject }}"></div>
+      <div class="field"><label for="rfq_body">Message</label>
+        <textarea id="rfq_body" name="rfq_body" class="tall">{{ case.rfq_body }}</textarea></div>
+
+      {% if uncontacted %}
+      <div class="field">
+        <label>Send to <span class="hint">(vendors with an email address that were not contacted yet)</span></label>
+        <div class="table-wrap"><table>
+          <thead><tr><th style="width:2rem"><input type="checkbox" data-select-all="vendor_ids" checked aria-label="Select all"></th><th>Vendor</th><th>Email</th></tr></thead>
+          <tbody>
+          {% for v in uncontacted %}
+            <tr><td><input type="checkbox" name="vendor_ids" value="{{ v.id }}" {{ 'checked' if v.selected }} aria-label="Include {{ v.name }}"></td>
+                <td>{{ v.name }}</td><td class="mono">{{ v.email }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table></div>
+      </div>
+      {% endif %}
+      <div class="actions">
+        {% if uncontacted %}
+          <button class="btn primary" type="submit" formaction="/cases/{{ case.id }}/drafts">Create drafts for selected</button>
+        {% endif %}
+        <button class="btn" type="submit" name="action" value="save">Save template</button>
+        {% if case.brief_status == 'confirmed' %}
+          <button class="btn" type="submit" name="action" value="generate" {{ 'data-confirm="Replace the current text with a new draft?"' | safe if case.rfq_body }}>{{ 'Redraft with Claude' if case.rfq_body else 'Draft with Claude' }}</button>
+        {% endif %}
+      </div>
+      {% if not uncontacted and case.active_vendors %}
+        <p class="muted" style="font-size:.85rem;margin-top:.5rem">All vendors with an email address already have a quote request. Add emails on the Vendors tab to reach more.</p>
+      {% endif %}
+    </form>
+  </details>
+</div>
+
+<h2 style="margin-top:1.5rem">Conversations</h2>
+{% if not threads %}
+  <div class="card empty"><p>No emails yet. Approved quote requests and vendor replies appear here, one thread per vendor.</p></div>
+{% endif %}
+{% for v in threads %}
+  {% set msgs = v.thread | rejectattr('status', 'equalto', 'draft') | list %}
+  {% if msgs %}
+  <div class="thread" id="thread-{{ v.id }}">
+    <div class="thread-head">
+      <div>
+        <h3>{{ v.name }}</h3>
+        <span class="muted mono" style="font-size:.8rem">{{ v.email }}</span>
+      </div>
+      {% set st = v.pipeline_status %}
+      <span class="badge {{ {'chosen':'green','quoted':'green','replied':'blue','contacted':'blue','declined':'red'}.get(st, '') }}">{{ st }}</span>
+    </div>
+    <div class="thread-body">
+      {% for m in msgs %}
+      <div class="msg {{ m.direction }}">
+        <div class="msg-meta">
+          <span>
+            {% if m.direction == 'out' %}You → {{ m.to_addr }}{% else %}{{ v.name }}{% if m.simulated %} <span class="badge">pasted</span>{% endif %}{% endif %}
+          </span>
+          <span>
+            {% if m.status == 'sent' %}sent {{ m.sent_at | local_time }}
+            {% elif m.status == 'received' %}received {{ m.received_at | local_time }}
+            {% elif m.status in ('queued', 'sending') %}<span class="spinner" style="width:10px;height:10px"></span> sending…
+            {% elif m.status == 'failed' %}<span class="badge red">failed</span>
+            {% endif %}
+          </span>
+        </div>
+        <div class="subject">{{ m.subject }}</div>
+        <div class="pre">{{ m.body }}</div>
+        {% if m.status == 'failed' %}
+          <div class="banner error" style="margin:.6rem 0 0">{{ m.error }}
+            <form method="post" action="/cases/{{ case.id }}/messages/{{ m.id }}" class="inline">
+              <button class="btn small" type="submit" name="op" value="send" data-confirm="Try sending this email again?">Retry sending</button>
+            </form>
+          </div>
+        {% endif %}
+        {% if m.analysis %}
+          {% set a = m.analysis %}
+          <div class="analysis">
+            <strong>Claude's read:</strong> {{ a.summary }}
+            {% if a.total_price is not none %} <span class="badge green">{{ money(a.total_price, a.currency) }}</span>{% endif %}
+            {% if a.vendor_questions %}<div><em>They ask:</em><ul>{% for q in a.vendor_questions %}<li>{{ q }}</li>{% endfor %}</ul></div>{% endif %}
+            {% if a.missing_info %}<div><em>Still missing:</em> {{ a.missing_info | join(', ') }}</div>{% endif %}
+          </div>
+        {% elif m.direction == 'in' %}
+          <div class="analysis muted"><span class="spinner" style="width:10px;height:10px"></span> reading…</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+
+      {% if case.status != 'closed' %}
+      <div class="grid-2">
+        <details>
+          <summary>{{ 'Paste the vendor’s reply' if mail_name == 'sandbox' else 'Add a reply received by phone / another inbox' }}</summary>
+          <form method="post" action="/cases/{{ case.id }}/vendors/{{ v.id }}/reply" data-track>
+            <textarea name="body" placeholder="Paste or type what {{ v.name }} replied - e.g. 'Hello, the total is 18 500 PLN incl. materials, we can start on 3 November. Valid 30 days.'"></textarea>
+            <div class="actions"><button class="btn small" type="submit">Add reply</button></div>
+          </form>
+        </details>
+        <details>
+          <summary>Draft a reply with Claude</summary>
+          <form method="post" action="/cases/{{ case.id }}/vendors/{{ v.id }}/draft-reply">
+            <div class="field">
+              <select name="intent" aria-label="Reply type">
+                <option value="clarify">Answer questions / ask for missing info</option>
+                <option value="negotiate">Negotiate price or terms</option>
+                <option value="accept">Accept the offer</option>
+                <option value="decline">Decline politely</option>
+                <option value="custom">Custom (use my instructions)</option>
+              </select>
+            </div>
+            <textarea name="instructions" style="min-height:60px" placeholder="Optional instructions, e.g. 'ask if they can start a week earlier'"></textarea>
+            <div class="actions"><button class="btn small" type="submit">Draft reply</button></div>
+          </form>
+        </details>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+{% endfor %}

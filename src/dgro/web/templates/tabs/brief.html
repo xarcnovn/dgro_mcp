@@ -1,0 +1,107 @@
+{% set drafting = busy | selectattr('kind', 'equalto', 'structure_brief') | list %}
+<div class="grid-2" style="grid-template-columns: 2fr 1fr; align-items:start">
+  <form method="post" action="/cases/{{ case.id }}/brief" class="card" data-track>
+    <div class="card-title">
+      <h2>Brief</h2>
+      {% if case.brief_status == 'confirmed' %}<span class="badge green">Confirmed</span>{% else %}<span class="badge amber">Draft</span>{% endif %}
+    </div>
+    {% if not case.summary and drafting %}
+      <p class="busy-bar muted"><span class="spinner"></span> Claude is reading your request and drafting the brief…</p>
+    {% endif %}
+
+    {% set open_q = case.questions or [] %}
+    {% if open_q %}
+    <div class="card flat" style="background:var(--primary-soft);border-color:transparent;margin-bottom:1rem">
+      <h3>Questions that would sharpen the quotes</h3>
+      <p class="muted" style="font-size:.85rem">Answer what you can, then “Refine with Claude”. Unanswered questions are fine.</p>
+      {% for q in open_q %}
+        <div class="field">
+          <label for="answer_{{ loop.index0 }}">{{ q.question }}</label>
+          <input type="text" id="answer_{{ loop.index0 }}" name="answer_{{ loop.index0 }}" value="{{ q.answer }}" placeholder="Your answer">
+        </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="field">
+      <label for="title">Title</label>
+      <input type="text" id="title" name="title" value="{{ case.title }}">
+    </div>
+    <div class="field">
+      <label for="summary">Summary for vendors</label>
+      <textarea id="summary" name="summary">{{ case.summary }}</textarea>
+    </div>
+    <div class="field">
+      <label for="requirements">Requirements <span class="hint">(one per line)</span></label>
+      <textarea id="requirements" name="requirements">{{ (case.requirements or []) | join('\n') }}</textarea>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label for="category">Category</label>
+        <input type="text" id="category" name="category" value="{{ case.category }}"></div>
+      <div class="field"><label for="quantity">Quantity / size</label>
+        <input type="text" id="quantity" name="quantity" value="{{ case.quantity }}"></div>
+      <div class="field"><label for="location">Location</label>
+        <input type="text" id="location" name="location" value="{{ case.location }}"></div>
+      <div class="field"><label for="city">City <span class="hint">(for local search)</span></label>
+        <input type="text" id="city" name="city" value="{{ case.city }}"></div>
+      <div class="field"><label for="budget">Budget</label>
+        <input type="text" id="budget" name="budget" value="{{ case.budget }}"></div>
+      <div class="field"><label for="deadline">Timing / deadline</label>
+        <input type="text" id="deadline" name="deadline" value="{{ case.deadline }}"></div>
+      <div class="field"><label for="country_code">Country code <span class="hint">(ISO, e.g. PL)</span></label>
+        <input type="text" id="country_code" name="country_code" maxlength="2" value="{{ case.country_code }}"></div>
+      <div class="field"><label for="vendor_language">Email language <span class="hint">(e.g. pl, en)</span></label>
+        <input type="text" id="vendor_language" name="vendor_language" maxlength="2" value="{{ case.vendor_language }}"></div>
+    </div>
+    <div class="field">
+      <label for="search_queries">Web search queries <span class="hint">(one per line - used to find vendors)</span></label>
+      <textarea id="search_queries" name="search_queries" style="min-height:70px">{{ (case.search_queries or []) | join('\n') }}</textarea>
+    </div>
+    <details {{ 'open' if not case.contact_email }}>
+      <summary>Your contact details in emails</summary>
+      <div class="grid-2">
+        <div class="field"><label for="contact_name">Name</label>
+          <input type="text" id="contact_name" name="contact_name" value="{{ case.contact_name }}"></div>
+        <div class="field"><label for="contact_email">Email</label>
+          <input type="email" id="contact_email" name="contact_email" value="{{ case.contact_email }}"></div>
+        <div class="field"><label for="contact_phone">Phone</label>
+          <input type="tel" id="contact_phone" name="contact_phone" value="{{ case.contact_phone }}"></div>
+        <div class="field"><label for="contact_company">Company</label>
+          <input type="text" id="contact_company" name="contact_company" value="{{ case.contact_company }}"></div>
+      </div>
+    </details>
+    <div class="actions">
+      {% if case.brief_status != 'confirmed' %}
+        <button class="btn primary" type="submit" name="action" value="confirm">Confirm brief &amp; find vendors</button>
+      {% endif %}
+      <button class="btn" type="submit" name="action" value="refine">Refine with Claude</button>
+      <button class="btn" type="submit" name="action" value="save">Save</button>
+    </div>
+  </form>
+
+  <div>
+    <div class="card">
+      <h3>Your original request</h3>
+      <p class="pre" style="font-size:.9rem">{{ case.request_text }}</p>
+    </div>
+    <div class="card">
+      <h3>How this works</h3>
+      <ol class="list-plain muted" style="font-size:.88rem">
+        <li>Confirm the brief.</li>
+        <li>Claude searches the web for vendors; dgro finds their contact emails.</li>
+        <li>You review one quote-request email and approve what goes out.</li>
+        <li>Replies are read and turned into comparable offers.</li>
+        <li>Compare, negotiate, choose.</li>
+      </ol>
+    </div>
+    {% if case.status != 'closed' %}
+    <form method="post" action="/cases/{{ case.id }}/state" class="inline">
+      <input type="hidden" name="status" value="closed">
+      <button class="btn small" type="submit" data-confirm="Close this case?">Close case</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/cases/{{ case.id }}/delete" class="inline">
+      <button class="btn small danger" type="submit" data-confirm="Delete this case and all its vendors, emails and offers? This cannot be undone.">Delete case</button>
+    </form>
+  </div>
+</div>
