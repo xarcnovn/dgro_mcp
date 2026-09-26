@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Cases{% endblock %}
+{% block content %}
+<div class="row between" style="margin-bottom:1rem">
+  <div>
+    <h1>Your cases</h1>
+    <p class="muted" style="margin:0">One case per thing you need quotes for. Each case goes brief → vendors → outreach → quotes → decision.</p>
+  </div>
+  <a class="btn primary" href="/cases/new">+ New case</a>
+</div>
+
+<div class="tabs">
+  <a href="/?show=open" class="{{ 'active' if show != 'closed' }}">Open<span class="count">{{ open_count }}</span></a>
+  <a href="/?show=closed" class="{{ 'active' if show == 'closed' }}">Closed<span class="count">{{ closed_count }}</span></a>
+</div>
+
+{% if not cases %}
+  <div class="card empty">
+    {% if show == 'closed' %}
+      <h2>No closed cases</h2>
+      <p>Cases you close after deciding show up here.</p>
+    {% else %}
+      <h2>Start your first case</h2>
+      <p>Describe what you need - a bathroom renovation, 20 office chairs, catering for 50 people - and dgro
+        drafts a brief, finds vendors, writes the quote requests and compares the offers.</p>
+      <a class="btn primary" href="/cases/new">Create a case</a>
+    {% endif %}
+  </div>
+{% else %}
+  <div class="card" style="padding:.25rem .5rem">
+    <div class="table-wrap">
+      <table class="case-list">
+        <thead>
+          <tr><th>Case</th><th>Stage</th><th>Vendors</th><th>Offers</th><th>Best offer</th><th>Updated</th></tr>
+        </thead>
+        <tbody>
+        {% for c in cases %}
+          {% set contacted = c.vendors | selectattr('has_rfq') | list %}
+          {% set best = c.best_quote %}
+          <tr onclick="window.location='/cases/{{ c.id }}'">
+            <td>
+              <a href="/cases/{{ c.id }}"><strong>{{ c.title or 'Untitled case' }}</strong></a>
+              {% if c.id in busy_ids %}<span class="spinner" style="margin-left:.4rem;color:var(--primary)" title="working"></span>{% endif %}
+              <div class="muted" style="font-size:.82rem">{{ c.category or 'New request' }}{% if c.city %} · {{ c.city }}{% endif %}</div>
+            </td>
+            <td>
+              {% if c.status == 'decided' %}<span class="badge green">Decided</span>
+              {% elif c.status == 'closed' %}<span class="badge">Closed</span>
+              {% else %}<span class="badge blue">{{ c.stage_index + 1 }}/5 · {{ stages[c.stage_index][1] }}</span>{% endif %}
+            </td>
+            <td class="nowrap">{{ contacted | length }} contacted / {{ c.active_vendors | length }}</td>
+            <td>{{ c.quotes | length }}</td>
+            <td class="nowrap">{% if best %}{{ money(best.total_price, best.currency) }}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td class="nowrap muted">{{ c.last_activity | ago }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% endif %}
+{% endblock %}

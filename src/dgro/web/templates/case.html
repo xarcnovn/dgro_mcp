@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ case.title or 'Case' }}{% endblock %}
+{% block content %}
+<div data-case-id="{{ case.id }}" data-version="{{ version }}" data-busy="{{ '1' if busy else '0' }}">
+
+  <div class="case-head">
+    <div class="row between">
+      <div>
+        <div class="muted" style="font-size:.85rem"><a href="/">Cases</a> / #{{ case.id }}</div>
+        <h1>{{ case.title or 'New case' }}</h1>
+      </div>
+      <div class="row">
+        {% if case.status == 'closed' %}<span class="badge">Closed</span>
+        {% elif case.status == 'decided' %}<span class="badge green">Decided</span>
+        {% else %}<span class="badge blue">Open</span>{% endif %}
+      </div>
+    </div>
+    <div class="case-meta">
+      {% if case.category %}<span>{{ case.category }}</span>{% endif %}
+      {% if case.location or case.city %}<span>📍 {{ case.location or case.city }}</span>{% endif %}
+      {% if case.budget %}<span>💰 {{ case.budget }}</span>{% endif %}
+      {% if case.deadline %}<span>🗓 {{ case.deadline }}</span>{% endif %}
+      <span>Created {{ case.created_at | local_time('%Y-%m-%d') }}</span>
+    </div>
+    <ol class="stepper">
+      {% for key, label in stages %}
+        {% set i = loop.index0 %}
+        <li class="{{ 'done' if i < case.stage_index or case.status in ('decided', 'closed') else ('current' if i == case.stage_index else '') }}">{{ label }}</li>
+      {% endfor %}
+    </ol>
+  </div>
+
+  {% if notice %}<div class="banner success">{{ notice }}</div>{% endif %}
+  {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+  <div id="updates-banner" class="banner info" hidden>
+    New results are ready. <a href="{{ request.url.path }}?tab={{ tab }}">Reload</a> (save your edits first).
+  </div>
+
+  {% if busy %}
+    <div class="banner info busy-bar"><span class="spinner"></span>
+      <span id="busy-label">{{ busy | map(attribute='label') | unique | join(' · ') }}…</span>
+    </div>
+  {% else %}
+    <div class="banner info next-step">
+      <span><strong>Next:</strong> {{ action.text }}</span>
+      {% if action.tab != tab %}<a class="btn small" href="?tab={{ action.tab }}">Go to {{ action.tab | capitalize }} →</a>{% endif %}
+    </div>
+  {% endif %}
+
+  {% for job in failed_jobs %}
+    {% if job.status == 'failed' %}
+    <div class="banner error row between">
+      <span><strong>{{ job.label }} failed:</strong> {{ job.error }}</span>
+      <form method="post" action="/cases/{{ case.id }}/jobs/{{ job.id }}/retry?tab={{ tab }}" class="inline">
+        <button class="btn small" type="submit">Retry</button>
+      </form>
+    </div>
+    {% endif %}
+  {% endfor %}
+
+  {% set drafts = case.draft_messages %}
+  <nav class="tabs">
+    <a href="?tab=brief" class="{{ 'active' if tab == 'brief' }}">1 · Brief</a>
+    <a href="?tab=vendors" class="{{ 'active' if tab == 'vendors' }}">2 · Vendors<span class="count">{{ case.active_vendors | length }}</span></a>
+    <a href="?tab=outreach" class="{{ 'active' if tab == 'outreach' }}">3 · Outreach<span class="count">{{ case.sent_messages | length }} sent{% if drafts %} · {{ drafts | length }} draft{% endif %}</span></a>
+    <a href="?tab=quotes" class="{{ 'active' if tab == 'quotes' }}">4 · Quotes<span class="count">{{ case.quotes | length }}</span></a>
+    <a href="?tab=activity" class="{{ 'active' if tab == 'activity' }}">Activity</a>
+  </nav>
+
+  {% include "tabs/" ~ tab ~ ".html" %}
+</div>
+{% endblock %}

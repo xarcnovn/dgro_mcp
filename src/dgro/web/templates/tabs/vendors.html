@@ -1,0 +1,95 @@
+{% set searching = busy | selectattr('kind', 'equalto', 'find_vendors') | list %}
+{% set scanning = busy | selectattr('kind', 'equalto', 'discover_contacts') | list %}
+<div class="card">
+  <div class="card-title">
+    <div>
+      <h2>Vendors</h2>
+      <p class="muted" style="margin:0;font-size:.88rem">Found with Claude's web search; contact emails are read from each vendor's own website.</p>
+    </div>
+    <div class="row">
+      {% if case.brief_status == 'confirmed' %}
+      <form method="post" action="/cases/{{ case.id }}/vendors/search" class="inline">
+        <button class="btn {{ 'primary' if not case.vendors }}" type="submit" {{ 'disabled' if searching }}>
+          {% if searching %}<span class="spinner"></span> Searching…{% elif case.vendors %}Find more vendors{% else %}Find vendors{% endif %}
+        </button>
+      </form>
+      {% else %}
+        <span class="muted" style="font-size:.88rem">Confirm the brief to search.</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not case.vendors %}
+    <div class="empty">
+      {% if searching %}<p class="busy-bar" style="justify-content:center"><span class="spinner"></span> Searching the web - this usually takes 30-90 seconds.</p>
+      {% else %}<p>No vendors yet.</p>{% endif %}
+    </div>
+  {% else %}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Vendor</th><th>Contact</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for v in case.vendors %}
+        <tr class="{{ 'muted-row' if v.excluded }}" id="vendor-{{ v.id }}">
+          <td style="max-width:380px">
+            <strong>{{ v.name }}</strong>
+            {% if v.source == 'manual' %}<span class="badge">manual</span>{% endif %}
+            {% if v.website %}<div><a href="{{ v.website }}" target="_blank" rel="noopener noreferrer" class="mono">{{ v.domain or v.website }}</a></div>{% endif %}
+            {% if v.description %}<div class="muted" style="font-size:.85rem">{{ v.description }}</div>{% endif %}
+            {% if v.relevance %}<div class="muted" style="font-size:.8rem"><em>{{ v.relevance }}</em></div>{% endif %}
+          </td>
+          <td style="min-width:260px">
+            <form method="post" action="/cases/{{ case.id }}/vendors/{{ v.id }}" class="row" style="gap:.35rem;flex-wrap:nowrap" data-track>
+              <input type="hidden" name="op" value="save">
+              <input type="email" name="email" value="{{ v.email }}" placeholder="email address" list="emails-{{ v.id }}" style="min-width:190px">
+              <datalist id="emails-{{ v.id }}">{% for e in v.emails or [] %}<option value="{{ e }}">{% endfor %}</datalist>
+              <button class="btn small" type="submit">Save</button>
+            </form>
+            <div class="muted" style="font-size:.8rem;margin-top:.25rem">
+              {% if v.contact_status == 'pending' %}<span class="spinner" style="width:10px;height:10px"></span> looking up contacts…
+              {% elif v.contact_status == 'missing' %}No email found{% if v.contact_note %} ({{ v.contact_note }}){% endif %}
+              {% elif v.contact_status == 'manual' %}Entered by you
+              {% elif v.emails and v.emails | length > 1 %}{{ v.emails | length }} addresses found - pick another from the list
+              {% endif %}
+              {% if v.phones %}<div>☎ {{ v.phones[:2] | join(', ') }}</div>{% endif %}
+            </div>
+          </td>
+          <td>
+            {% set st = v.pipeline_status %}
+            <span class="badge {{ {'chosen':'green','quoted':'green','replied':'blue','contacted':'blue','draft':'amber','declined':'red','not chosen':''}.get(st, '') }}">{{ st }}</span>
+          </td>
+          <td class="nowrap" style="text-align:right">
+            {% if v.website %}
+            <form method="post" action="/cases/{{ case.id }}/vendors/{{ v.id }}" class="inline">
+              <input type="hidden" name="op" value="rescan"><button class="btn small link" type="submit" title="Scan the website again for contact details">Rescan</button>
+            </form>
+            {% endif %}
+            <form method="post" action="/cases/{{ case.id }}/vendors/{{ v.id }}" class="inline">
+              {% if v.excluded %}
+                <input type="hidden" name="op" value="include"><button class="btn small link" type="submit">Restore</button>
+              {% else %}
+                <input type="hidden" name="op" value="exclude"><button class="btn small link" type="submit" style="color:var(--danger)">Exclude</button>
+              {% endif %}
+            </form>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <details {{ 'open' if not case.vendors and not searching }}>
+    <summary>Add a vendor you already know</summary>
+    <form method="post" action="/cases/{{ case.id }}/vendors">
+      <div class="grid-3">
+        <div class="field"><label for="v-name">Name</label><input type="text" id="v-name" name="name" placeholder="Company name"></div>
+        <div class="field"><label for="v-website">Website</label><input type="text" id="v-website" name="website" placeholder="example.pl"></div>
+        <div class="field"><label for="v-email">Email <span class="hint">(optional - otherwise we look it up)</span></label><input type="email" id="v-email" name="email"></div>
+      </div>
+      <button class="btn" type="submit">Add vendor</button>
+    </form>
+  </details>
+</div>

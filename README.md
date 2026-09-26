@@ -1,293 +1,135 @@
-# Business Finder & Offer Negotiator
+# dgro · quotes
 
-> A multi-agent MCP server that automates vendor discovery, contact extraction, and email negotiation to help you find the best deals.
+Describe what you need, and dgro gets you comparable quotes: it turns your request into a brief, finds local
+vendors on the web, emails them a request for quote in your name (after you approve it), reads their replies,
+extracts the offers and helps you compare, negotiate and decide.
 
-## 🎯 Overview
+Everything is organised around a **Case** (one thing you need quotes for), which moves through five stages:
 
-This MCP (Model Context Protocol) server transforms how you find and negotiate with vendors. It combines intelligent search, automated contact discovery, and strategic email negotiations into a seamless workflow powered by three specialized AI agents.
+| Stage | What happens | Who acts |
+|---|---|---|
+| 1 Brief | Claude structures your request, asks up to 4 questions that would change the quotes | you confirm |
+| 2 Vendors | Claude web search finds businesses; dgro reads their sites for contact emails | automatic, you curate |
+| 3 Outreach | One quote-request email (Claude drafts it in the vendors' language), one draft per vendor | **you approve each send** |
+| 4 Quotes | Replies are matched to vendors and turned into structured offers (price, timeline, scope, gaps) | automatic |
+| 5 Decision | Side-by-side comparison + recommendation; reply drafts to clarify, negotiate, accept or decline | you choose |
 
-### Key Features
+Runs entirely on your machine: a local web app, SQLite database and email through your own mailbox.
 
-- **🔍 Intelligent Search**: Leverage Google Custom Search API to find relevant businesses
-- **📧 Contact Extraction**: Automatically scrape websites for emails and phone numbers
-- **💬 Email Automation**: Send, track, and manage vendor communications via Gmail
-- **💼 Offer Management**: Structure and compare vendor proposals in SQLite
-- **🤖 Multi-Agent System**: Consultant → Researcher → Negotiator workflow
+## Quick start
 
-## 🏗️ Architecture
+Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/) (or pip).
 
-### Multi-Agent System
-
-```
-┌─────────────┐    ┌──────────────┐    ┌─────────────┐
-│ Consultant  │ →  │  Researcher  │ →  │ Negotiator  │
-│ Gathers     │    │  Finds       │    │  Manages    │
-│ Requirements│    │  Contacts    │    │  Offers     │
-└─────────────┘    └──────────────┘    └─────────────┘
-```
-
-**1. Consultant Agent**
-- Collects user requirements through guided questions
-- Extracts budget, preferences, location, and constraints
-- Maximum 5 messages before handoff to Researcher
-
-**2. Researcher Agent**
-- Executes Google Custom Search based on requirements
-- Scrapes vendor websites for contact information
-- Prioritizes contact pages for better results
-
-**3. Negotiator Agent**
-- Drafts personalized outreach emails
-- Tracks communication threads
-- Extracts and structures offer details
-- Recommends best options
-
-### Technology Stack
-
-- **MCP Server**: FastMCP for tool orchestration
-- **Search**: Google Custom Search API
-- **Email**: Gmail API (OAuth 2.0)
-- **Database**: SQLite with 5 core tables
-- **Scraping**: Concurrent web scraper with retry logic
-
-## 📁 Project Structure
-
-```
-dgro_mcp/
-├── mcp_server_incremental.py  # Main MCP server (recommended)
-├── mcp_server.py               # Prototype server (legacy)
-├── scraper.py                  # Concurrent web scraper
-├── search.py                   # Google Search helpers
-├── gmail_manager.py            # Gmail utilities
-├── case_search.db              # Main database
-├── credentials.json            # Gmail OAuth credentials
-├── token.pickle                # Gmail auth token
-└── requirements.txt            # Python dependencies
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.13+
-- Google Cloud project with:
-  - Custom Search API enabled
-  - Gmail API enabled
-  - OAuth 2.0 credentials (Desktop app)
-
-### Installation
-
-Using `uv` (recommended):
 ```bash
-cd dgro_mcp
 uv sync
+uv run dgro serve          # http://127.0.0.1:8000
 ```
 
-Using `pip`:
+Without any configuration dgro starts in **demo mode**: AI steps return simulated results with demo vendors
+(on the reserved `.example` domain) and email runs in **sandbox mode**, so you can click through a whole case,
+paste vendor replies yourself, compare offers and choose one, with nothing leaving your machine.
+
+With pip instead of uv: `python -m venv .venv && source .venv/bin/activate && pip install -e . && dgro serve`.
+
+## Use Claude
+
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+cp .env.example .env       # set ANTHROPIC_API_KEY, DGRO_REQUESTER_NAME, DGRO_REQUESTER_EMAIL
+uv run dgro doctor --live  # checks the key and model
+uv run dgro serve
 ```
 
-### Configuration
+- Default model: `claude-opus-5` (`DGRO_MODEL` to change). Refusals are retried server-side on another model
+  (`fallbacks="default"`); set `DGRO_REFUSAL_FALLBACK=false` to turn that off.
+- Vendor search uses Claude's server-side web search tool, which must be enabled for your organisation in the
+  Claude Console. It costs $10 per 1,000 searches plus tokens
+  ([pricing](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool)); dgro allows up to
+  6 searches per vendor search (`DGRO_WEB_SEARCH_MAX_USES`).
 
-1. **Create `.env` file**:
-```env
-GOOGLE_API_KEY=your_google_api_key
-GOOGLE_CSE_ID=your_custom_search_engine_id
-GOOGLE_CREDENTIALS_FILE=credentials.json
+## Send real email
+
+Email stays in **sandbox** mode until you switch it: approved emails are written to `data/outbox/*.eml` and you
+paste vendor replies into the case. For real sending and automatic reply collection, use any SMTP/IMAP mailbox:
+
+```ini
+DGRO_EMAIL_MODE=smtp
+DGRO_SMTP_HOST=smtp.gmail.com
+DGRO_SMTP_USERNAME=you@gmail.com
+DGRO_SMTP_PASSWORD=xxxxxxxxxxxxxxxx   # Gmail: an app password
+DGRO_IMAP_HOST=imap.gmail.com
+DGRO_EMAIL_REDIRECT_TO=you+test@gmail.com   # recommended for the first run, see below
 ```
 
-2. **Set up Gmail API**:
-   - Download OAuth 2.0 credentials from Google Cloud Console
-   - Save as `credentials.json` in project root
-   - First email action will trigger OAuth flow in browser
+- Gmail needs 2-Step Verification and an [app password](https://support.google.com/accounts/answer/185833).
+- `DGRO_EMAIL_REDIRECT_TO` delivers every outgoing email to you instead of the vendor (subject prefixed with
+  the real recipient). Reply to it yourself as if you were the vendor and watch the offer appear in the case.
+  Remove it when you are ready to contact real businesses.
+- The inbox is checked every 3 minutes (read-only; nothing is marked as read) and only messages that reply to
+  dgro's emails or come from a contacted vendor's address are imported. Replies are matched through the
+  standard `In-Reply-To`/`References` headers ([RFC 5322 §3.6.4](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.4)).
+- `uv run dgro doctor --live` tests the SMTP and IMAP logins.
 
-### Running the Server
+## How it is built
 
-**Recommended (incremental server)**:
+The old version exposed ~25 tools over MCP and relied on one long agent conversation to call them in the right
+order. This version inverts that: **the workflow is plain Python and Claude is called inside individual steps.**
+
+- **Workflow, not an agent loop.** The order of steps is fixed in code (`workflow/steps.py`); each step makes one
+  narrow Claude call with a typed result. This is the "workflow" pattern Anthropic recommends when the task can
+  be decomposed into predictable steps, keeping agents for open-ended problems
+  ([Building effective agents](https://www.anthropic.com/research/building-effective-agents)). The only
+  open-ended step, vendor research, uses Claude's server-side web search tool, which runs its own search loop.
+- **Structured outputs.** Brief, vendor list, emails, offer extraction and comparison come back as Pydantic
+  models via `client.beta.messages.parse`, so the app never parses free text.
+- **Web search instead of Google Custom Search.** Google's Custom Search JSON API is closed to new customers and
+  shuts down on 1 January 2027 ([Google](https://developers.google.com/custom-search/v1/overview)).
+- **Durable background jobs.** Slow steps (Claude calls, scraping, sending, inbox sync) are rows in SQLite run by
+  worker threads in the server process. They survive restarts, retry transient failures with backoff, surface
+  errors on the case with a Retry button, and never re-send an email whose delivery state is unknown.
+- **Human in the loop.** Nothing is emailed without your approval; drafts with `[TODO: …]` placeholders cannot
+  be sent; the UI refreshes itself while jobs run but never over unsaved edits.
+- **Offline test double.** `llm/fake_llm.py` implements the same interface deterministically; it powers demo
+  mode and the test suite.
+
+```
+src/dgro/
+  models.py            Case, Vendor, Message, Quote, Job, Event (SQLite via SQLAlchemy)
+  schemas.py           structured outputs requested from Claude
+  llm/                 anthropic_llm.py (SDK), fake_llm.py (offline), prompts.py
+  services/            scraper.py (contact discovery), mail.py (sandbox, SMTP/IMAP)
+  workflow/            steps.py (the pipeline), actions.py (user operations), jobs.py (queue + workers)
+  web/                 FastAPI app, Jinja templates, a little vanilla JS (no build step)
+  cli.py               dgro serve | doctor | sync-inbox
+```
+
+## Safety notes
+
+- There is no login: dgro binds to `127.0.0.1`, rejects unknown `Host` headers (DNS rebinding) and cross-site
+  form posts (CSRF). Do not expose it to a network.
+- The contact scraper honours `robots.txt`, identifies itself, reads at most 6 pages per site with a delay, and
+  refuses private/loopback addresses.
+- Vendor emails and web content are passed to Claude as tagged, untrusted data, and every email it drafts is
+  reviewed by you.
+- Your data stays in `data/` (SQLite + outbox). Case details, web research and vendor replies are sent to the
+  Claude API for processing.
+
+## Development
+
 ```bash
-python mcp_server_incremental.py
+uv run pytest              # 37 tests: workflow end to end, web UI, scraper, SMTP/IMAP, Claude API request shapes
+uv run ruff check src tests
 ```
 
-**With MCP Dev Tools**:
-```bash
-mcp dev mcp_server_incremental.py
-```
+Schema changes that only add columns are applied automatically on startup; anything else needs a migration tool
+such as Alembic. Set `ANTHROPIC_LOG=debug` to log raw API traffic.
 
-**Legacy prototype server**:
-```bash
-python mcp_server.py
-```
+## Troubleshooting
 
-## 💡 Usage Workflow
-
-### Happy Path Example
-
-```
-1. User expresses need
-   ↓
-2. create_case + create_user (capture requirements)
-   ↓
-3. execute_google_search (find vendors)
-   ↓
-4. scrape_website_contacts (extract emails/phones)
-   ↓
-5. send_email_to_vendor (initial outreach)
-   ↓
-6. get_unread_vendor_emails (check responses)
-   ↓
-7. create_offer (structure proposal)
-   ↓
-8. reply_to_vendor_email (negotiate)
-   ↓
-9. get_case_offers (compare options)
-   ↓
-10. Select best offer ✓
-```
-
-## 🛠️ Available Tools
-
-### Case & User Management
-- `create_case` - Initialize new case with requirements
-- `update_case` - Modify case details
-- `get_case` - Retrieve case with searches
-- `create_user` - Add user contact information
-- `update_user` - Modify user details
-- `get_user` - Retrieve user information
-
-### Search & Discovery
-- `execute_google_search` - Search and save results
-- `create_search` - Initialize search record
-- `update_search` - Update search results
-- `get_search` - Retrieve search details
-
-### Contact Extraction
-- `scrape_website_contacts` - Extract emails/phones from websites
-  - Concurrent crawling (configurable workers)
-  - Prioritizes contact pages
-  - Retry logic with exponential backoff
-  - User agent rotation
-
-### Email Communication
-- `send_email_to_vendor` - Send initial outreach
-- `get_unread_vendor_emails` - Check new responses
-- `reply_to_vendor_email` - Continue conversation
-- `mark_email_as_read` - Update email status
-- `get_email_thread` - View full conversation
-- `get_case_communications` - All emails for case
-
-### Offer Management
-- `create_offer` - Record vendor proposal
-- `update_offer` - Modify offer details
-- `get_case_offers` - Compare all offers for case
-
-## 📊 Database Schema
-
-### Tables
-
-**cases**
-```sql
-id, subject, features, location, budget, timeline, additional_features
-```
-
-**users**
-```sql
-id, case_id, name, email, phone
-```
-
-**searches**
-```sql
-id, case_id, search_goal, search_query, search_results
-```
-
-**email_communications**
-```sql
-id, case_id, vendor_email, vendor_name, vendor_website, 
-subject, message_id, thread_id, email_type, email_content, 
-sent_at, status
-```
-
-**offers**
-```sql
-offer_id, case_id, status, price, timeline, accuracy,
-additional_details, communication_thread_id, vendor_email,
-created_at, updated_at
-```
-
-## ⚙️ Configuration Options
-
-### Scraper Settings
-```python
-scrape_website_contacts(
-    urls=["https://example.com"],
-    max_pages_per_site=10,  # Pages to crawl per domain
-    max_workers=3           # Concurrent scraping threads
-)
-```
-
-### Search Parameters
-- Results per query: 30 (3 pages × 10 results)
-- Geographic preference: Poland (`gl: 'pl'`)
-- Language: English (`hl: 'en'`)
-- Safe search: Active
-
-## 🔒 Security Notes
-
-- **Gmail OAuth**: Token stored in `token.pickle` (add to `.gitignore`)
-- **API Keys**: Never commit `.env` file
-- **Rate Limiting**: Scraper includes delays between requests
-- **User Agents**: Rotated to avoid detection
-
-## 🐛 Troubleshooting
-
-### Search Credentials Missing
-**Error**: Tools return `success: False`
-**Solution**: Ensure `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` are set in `.env`
-
-### Gmail Credentials Not Found
-**Error**: `FileNotFoundError: credentials.json not found`
-**Solution**: Download OAuth credentials from Google Cloud Console
-
-### Scraping Issues
-**Symptoms**: Non-HTML responses, retry failures
-**Solutions**:
-- Reduce `max_workers` or `max_pages_per_site`
-- Check website's `robots.txt`
-- Increase `delay_between_requests`
-
-### Thread Linking Failures
-**Issue**: Emails not associated with correct case
-**Note**: System uses heuristic matching when `thread_id` unknown
-**Check**: `associated_case` and `potential_case` fields
-
-### Empty Offers List
-**Issue**: `get_case_offers` returns no results
-**Solution**: Ensure offers created via `create_offer` before querying
-
-## 🗺️ Roadmap
-
-- [ ] Automatic Negotiator flow (batch outreach)
-- [ ] Parallel negotiation management
-- [ ] Enhanced vendor validation
-- [ ] De-duplication across search results  
-- [ ] Improved email-to-case mapping heuristics
-- [ ] Automatic offer field extraction from emails
-- [ ] Support for additional communication channels
-
-## 📝 License
-
-MIT License - See repository for dependency licenses
-
-## 🤝 Contributing
-
-This project uses:
-- Python 3.13+
-- Type hints for better IDE support
-- SQLite for simplicity and portability
-- FastMCP for MCP protocol implementation
-
----
-
-**Note**: The incremental server (`mcp_server_incremental.py`) is recommended for all use cases. The prototype server is kept for reference only.
+| Symptom | Fix |
+|---|---|
+| Banner says demo mode | `ANTHROPIC_API_KEY` is not set in the environment or in `.env` in the folder you run `dgro` from |
+| "authentication failed" on a step | wrong key; check with `dgro doctor --live`, then press Retry on the case |
+| Vendor search fails: web search not enabled | enable web search in the Claude Console privacy settings, or add vendors manually |
+| Few or no emails found for vendors | type the address in the Vendors tab, or press Rescan |
+| SMTP/IMAP login fails | Gmail: use an app password (2-Step Verification required); check host/port/security |
+| Port already in use | `uv run dgro serve --port 8001` |
