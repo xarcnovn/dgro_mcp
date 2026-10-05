@@ -1,0 +1,1845 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Homonoia</title>
+<meta name="description" content="Homonoia builds swarm autonomy: software and airframes that let one operator direct many drones as one system, for defence and civil protection.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Hanken+Grotesk:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=GFS+Didot&text=%E1%BD%81%CE%BC%CF%8C%CE%BD%CE%BF%CE%B9%CE%B1&display=swap">
+<style>
+:root{
+  /* Layout: one live 3D world seen through full-bleed windows, alternating with paper and ink chapters on an editorial grid */
+  --ink:#06004a;        /* deepest indigo of the references */
+  --ultra:#12107f;      /* signature ultramarine */
+  --ultra-2:#2b2a8f;
+  --haze:#7878ba;
+  --mist:#b9b9e0;
+  --paper:#e7e7f5;
+  --white:#f6f7fd;
+  --rule-ink:rgba(246,247,253,.18);
+  --rule-paper:rgba(6,0,74,.17);
+  --f-display:"Cormorant Garamond","GFS Didot",Cormorant,Garamond,"Times New Roman",serif;
+  --f-body:"Hanken Grotesk","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --gutter:clamp(16px,4vw,56px);
+  --maxw:1320px;
+  --grain:none;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{background:var(--ink);-webkit-text-size-adjust:100%}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--ink);color:var(--white);font-family:var(--f-body);font-size:1.0625rem;line-height:1.62;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden;overflow-x:clip}
+img,svg,canvas{max-width:100%}
+a{color:inherit;text-underline-offset:.22em;text-decoration-thickness:1px}
+:focus-visible{outline:2px solid var(--mist);outline-offset:3px}
+.paper :focus-visible{outline-color:var(--ultra)}
+h1,h2,h3,h4{margin:0;font-family:var(--f-display);font-weight:300;letter-spacing:-.01em;text-wrap:balance}
+p{margin:0}
+.wrap{max-width:var(--maxw);margin-inline:auto}
+.eyebrow{font-family:var(--f-mono);font-size:.72rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;line-height:1.4}
+.wrap>.eyebrow+h2{margin-top:20px}
+.mono{font-family:var(--f-mono)}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- world canvas */
+#world{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;background:var(--mist)}
+.no-webgl #world{background:radial-gradient(120% 90% at 70% 30%,var(--white),var(--mist) 35%,var(--haze) 62%,var(--ultra) 100%)}
+
+/* ---------- top bar */
+.topbar{position:fixed;top:0;left:0;right:0;z-index:40;display:flex;align-items:center;justify-content:space-between;gap:20px;padding:calc(14px + env(safe-area-inset-top,0px)) var(--gutter) 14px;color:var(--ink);transition:background-color .35s,color .35s}
+.topbar.solid{background:rgba(6,0,74,.86);color:var(--white);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit;flex-shrink:0}
+.brand svg{width:24px;height:22px;display:block}
+.wordmark{font-family:var(--f-display);font-weight:500;font-size:1.06rem;letter-spacing:.34em;text-transform:uppercase}
+.nav{display:flex;align-items:center;gap:clamp(12px,1.6vw,26px)}
+.nav a{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;opacity:.86}
+.nav a:hover{opacity:1;text-decoration:underline}
+.nav .btn{opacity:1}
+.topbar .menu-btn{display:none}
+@media (max-width:1060px){
+  .nav{display:none}
+  .topbar .menu-btn{display:inline-flex}
+  .nav.open{display:flex;position:fixed;inset:0;z-index:-1;flex-direction:column;align-items:flex-start;justify-content:center;gap:22px;padding:96px var(--gutter) 48px;background:var(--ink);color:var(--white)}
+  .nav.open a{font-size:.9rem}
+}
+
+/* ---------- buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.7em;font-family:var(--f-mono);font-size:.72rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;text-decoration:none;line-height:1;padding:1em 1.35em;border:1px solid currentColor;border-radius:0;color:inherit;background:transparent;cursor:pointer;transition:background-color .2s,color .2s,border-color .2s}
+.btn:hover{background:rgba(127,127,200,.16)}
+.btn.fill-ink{background:var(--ink);border-color:var(--ink);color:var(--white)}
+.btn.fill-ink:hover{background:var(--ultra);border-color:var(--ultra)}
+.btn.fill-white{background:var(--white);border-color:var(--white);color:var(--ink)}
+.btn.fill-white:hover{background:var(--mist);border-color:var(--mist)}
+.btn.small{padding:.8em 1em;font-size:.66rem}
+.btn[aria-pressed="true"]{background:var(--white);color:var(--ink);border-color:var(--white)}
+.arrow{display:inline-block;transition:transform .2s}
+.btn:hover .arrow{transform:translateX(3px)}
+
+/* eyebrows keep their size inside containers that style plain paragraphs */
+.signal p.eyebrow,.system>p.eyebrow,.lab-head p.eyebrow{font-size:.72rem;line-height:1.4}
+
+/* ---------- citations */
+a.cite{font-family:var(--f-mono);font-size:.62em;font-weight:500;vertical-align:super;line-height:0;text-decoration:none;padding:0 .12em;opacity:.72;white-space:nowrap}
+a.cite::before{content:"["}a.cite::after{content:"]"}
+a.cite:hover{opacity:1;text-decoration:underline}
+
+/* ---------- grain on chapters */
+.grain{position:relative;isolation:isolate}
+.grain::before{content:"";position:absolute;inset:0;z-index:-1;background-image:var(--grain);background-size:180px 180px;opacity:.2;mix-blend-mode:overlay;pointer-events:none}
+
+/* ---------- hero */
+.hero{position:relative;z-index:1;min-height:min(100svh,1060px);display:flex;flex-direction:column;justify-content:space-between;gap:40px;padding:calc(124px + env(safe-area-inset-top,0px)) var(--gutter) 26px;color:var(--ink)}
+.hero::after{content:"";position:absolute;left:0;right:0;bottom:0;height:52%;z-index:-1;background:linear-gradient(to top,rgba(6,0,74,.78),rgba(6,0,74,.35) 45%,rgba(6,0,74,0));pointer-events:none}
+.hero-copy{max-width:min(680px,100%)}
+.hero .eyebrow{display:flex;gap:.8em;align-items:baseline;flex-wrap:wrap}
+.greek{font-family:var(--f-display);font-size:1.5rem;letter-spacing:.02em;text-transform:none;font-weight:400}
+.hero h1{font-size:clamp(3.5rem,9.4vw,9.2rem);line-height:.86;letter-spacing:-.025em;margin:.16em 0 .32em;text-shadow:0 0 40px rgba(231,231,245,.55)}
+.hero h1 em{font-style:italic}
+.lede{font-size:clamp(1.04rem,1.3vw,1.2rem);line-height:1.55;max-width:34rem;text-shadow:0 0 18px rgba(231,231,245,.9)}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:30px}
+.fig{position:absolute;z-index:2;top:calc(84px + env(safe-area-inset-top,0px));right:var(--gutter);max-width:290px;text-align:right;font-family:var(--f-mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;line-height:1.65}
+.fig b{font-weight:500}
+.fig .pause{margin-top:8px}
+.on-ink{color:var(--white)}
+.ledger{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid rgba(246,247,253,.32);color:var(--white)}
+.ledger>div{padding:18px 22px 4px 0;min-width:0}
+.ledger>div+div{padding-left:22px;border-left:1px solid rgba(246,247,253,.18)}
+.ledger .num{font-family:var(--f-display);font-size:clamp(2rem,3.3vw,3.1rem);line-height:1;font-weight:400;font-variant-numeric:lining-nums tabular-nums;letter-spacing:-.01em}
+.ledger p{margin-top:8px;font-size:.86rem;line-height:1.45;opacity:.9;max-width:30ch}
+@media (max-width:700px){
+  .hero{padding-top:calc(50svh + env(safe-area-inset-top,0px))}
+  .hero::after{height:32%}
+  .panel{padding:22px 20px 20px}
+  .panel h2{font-size:2.1rem}
+  .window{padding-bottom:22px}
+}
+@media (max-width:900px){
+  .ledger{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ledger>div:nth-child(3){padding-left:0;border-left:0}
+  .ledger>div:nth-child(n+3){border-top:1px solid rgba(246,247,253,.18)}
+  .fig{font-size:.58rem;max-width:220px}
+  .hero .fig>div{display:none}
+}
+
+/* ---------- windows into the world */
+.window{position:relative;z-index:1;min-height:100svh;display:flex;align-items:flex-end;padding:120px var(--gutter) 44px}
+.window.right{justify-content:flex-end}
+.window .fig{color:var(--white)}
+.panel{max-width:540px;padding:30px 32px 28px;background:rgba(6,0,74,.7);-webkit-backdrop-filter:blur(9px);backdrop-filter:blur(9px);border:1px solid rgba(246,247,253,.16);color:var(--white)}
+.panel h2{font-size:clamp(2.2rem,4.2vw,3.6rem);line-height:.98;margin:.35em 0 .4em}
+.panel p+p{margin-top:.8em}
+.panel .row{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.telemetry{margin-top:20px;padding-top:12px;border-top:1px solid rgba(246,247,253,.18);font-family:var(--f-mono);font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;opacity:.86;display:flex;flex-wrap:wrap;gap:4px 16px}
+.telemetry b{font-weight:500}
+.coda h2{font-size:clamp(2.5rem,5vw,4.4rem)}
+
+/* ---------- chapters */
+.chapter{position:relative;z-index:1;padding:clamp(76px,10vw,150px) var(--gutter)}
+.paper{background:var(--paper);color:var(--ink)}
+.ink{background:var(--ultra);color:var(--white)}
+.deep{background:var(--ink);color:var(--white)}
+.chapter h2{font-size:clamp(2.5rem,5.6vw,5rem);line-height:.96;letter-spacing:-.02em}
+.chapter h2 em{font-style:italic}
+.head{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:clamp(28px,5vw,80px);align-items:end}
+.head .intro{font-size:1.12rem;max-width:36rem}
+.head .eyebrow{margin-bottom:22px}
+@media (max-width:900px){.head{grid-template-columns:1fr}}
+
+/* thesis */
+.thesis-body{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:clamp(32px,6vw,96px);margin-top:clamp(40px,6vw,80px)}
+.prose p{font-size:1.12rem;line-height:1.66}
+.prose p+p{margin-top:1.05em}
+.prose .drop::first-letter{font-family:var(--f-display);float:left;font-size:4.6em;line-height:.8;padding:.06em .1em 0 0;font-weight:400}
+.signal{border-top:1px solid var(--rule-paper);padding-top:22px;align-self:start}
+.signal h3{font-size:1.75rem;font-weight:400;line-height:1.1;margin:12px 0 12px}
+.signal p{font-size:.98rem}
+.signal .big{font-family:var(--f-display);font-size:clamp(3.4rem,6vw,5.2rem);line-height:.9;font-weight:300;margin-top:24px;font-variant-numeric:lining-nums}
+.signal .cap{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;opacity:.75;margin-top:6px}
+@media (max-width:900px){.thesis-body{grid-template-columns:1fr}}
+
+/* technology */
+.layers{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:clamp(44px,6vw,80px);border-top:1px solid var(--rule-ink)}
+.layer{padding:26px 24px 8px 0;min-width:0}
+.layer+.layer{padding-left:24px;border-left:1px solid var(--rule-ink)}
+.layer svg{display:block;width:72px;height:72px;margin-bottom:22px;color:var(--mist)}
+.layer h3{font-size:1.6rem;font-weight:400;line-height:1.1;margin-bottom:12px}
+.layer p{font-size:.96rem;line-height:1.6;color:rgba(246,247,253,.86)}
+@media (max-width:1060px){.layers{grid-template-columns:repeat(2,minmax(0,1fr))}.layer:nth-child(3){padding-left:0;border-left:0}.layer:nth-child(n+3){border-top:1px solid var(--rule-ink);margin-top:18px}}
+@media (max-width:620px){.layers{grid-template-columns:1fr}.layer+.layer{padding-left:0;border-left:0;border-top:1px solid var(--rule-ink);margin-top:18px}}
+
+/* swarm lab */
+.lab{margin-top:clamp(56px,8vw,110px);padding-top:clamp(28px,4vw,44px);border-top:1px solid var(--rule-ink)}
+.lab-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;flex-wrap:wrap}
+.lab-head h3{font-size:clamp(2rem,3.6vw,3rem);font-weight:300;line-height:1;margin:10px 0 12px}
+.lab-head p{max-width:46rem;color:rgba(246,247,253,.86)}
+.lab-controls{display:flex;gap:10px;flex-wrap:wrap}
+.lab-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:26px}
+.lab-pane{margin:0;min-width:0;border:1px solid var(--rule-ink);background:var(--ink)}
+.lab-pane figcaption{display:flex;justify-content:space-between;align-items:baseline;gap:6px 14px;flex-wrap:wrap;padding:11px 14px;border-bottom:1px solid var(--rule-ink);font-family:var(--f-mono);font-size:.66rem;letter-spacing:.11em;text-transform:uppercase}
+.lab-status{color:var(--mist)}
+.lab-status.alert{color:var(--white)}
+.lab-pane canvas{display:block;width:100%;height:clamp(260px,30vw,380px);cursor:crosshair;touch-action:manipulation}
+.sliders{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px 22px;margin-top:20px}
+.sliders label{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;font-family:var(--f-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase}
+.sliders input{grid-column:1/-1;width:100%;-webkit-appearance:none;appearance:none;height:20px;background:transparent;cursor:pointer}
+.sliders input::-webkit-slider-runnable-track{height:2px;background:rgba(246,247,253,.32)}
+.sliders input::-moz-range-track{height:2px;background:rgba(246,247,253,.32)}
+.sliders input::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-6px;border:0;border-radius:50%;background:var(--white)}
+.sliders input::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:var(--white)}
+.sliders output{font-variant-numeric:tabular-nums;color:var(--mist)}
+.lab-note{margin-top:16px;font-size:.88rem;color:rgba(246,247,253,.75)}
+@media (max-width:860px){.lab-grid{grid-template-columns:1fr}.sliders{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* systems */
+.systems{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));column-gap:56px;margin-top:clamp(44px,6vw,80px);border-top:1px solid var(--rule-paper)}
+.system{position:relative;min-width:0;padding:30px 0 10px;display:flex;flex-direction:column}
+.system+.system::before{content:"";position:absolute;left:-28px;top:0;bottom:0;border-left:1px solid var(--rule-paper)}
+.system svg{display:block;width:100%;height:auto;margin-bottom:26px;color:var(--ultra)}
+.system svg text{font-family:var(--f-mono);font-size:9px;letter-spacing:.08em}
+.system .eyebrow{opacity:.7}
+.system h3{font-size:2.2rem;font-weight:500;letter-spacing:.2em;text-transform:uppercase;line-height:1;margin:10px 0 14px}
+.system h3 small{display:block;font-size:.5em;letter-spacing:.02em;text-transform:none;font-style:italic;font-weight:400;margin-top:8px;opacity:.75}
+.system>p{font-size:.98rem}
+.spec{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 18px;margin:22px 0 0;padding-top:16px;border-top:1px solid var(--rule-paper);font-family:var(--f-mono);font-size:.74rem;line-height:1.45}
+.spec dt{opacity:.6;text-transform:uppercase;letter-spacing:.08em}
+.spec dd{margin:0;font-variant-numeric:tabular-nums}
+.note{margin-top:28px;font-family:var(--f-mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;opacity:.7}
+@media (max-width:980px){.systems{grid-template-columns:1fr}.system{padding:30px 0 18px}.system+.system::before{display:none}.system+.system{border-top:1px solid var(--rule-paper)}.system svg{max-width:420px}}
+
+/* dual use */
+.dual{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));margin-top:clamp(44px,6vw,80px);border-top:1px solid var(--rule-paper)}
+.dual-col{min-width:0;padding:28px clamp(20px,4vw,56px) 0 0}
+.dual-col+.dual-col{padding:28px 0 0 clamp(20px,4vw,56px);border-left:1px solid var(--rule-paper)}
+.side{font-size:clamp(2.6rem,4.4vw,3.8rem);font-style:italic;font-weight:300;line-height:1}
+.side+.eyebrow{margin-top:10px;opacity:.7}
+.use{padding:22px 0;border-bottom:1px solid var(--rule-paper)}
+.use:last-child{border-bottom:0}
+.use h3{font-family:var(--f-mono);font-size:.76rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;margin-bottom:8px}
+.use p{font-size:1rem}
+.law{display:grid;grid-template-columns:auto minmax(0,1fr);gap:22px;align-items:start;margin-top:clamp(36px,5vw,64px);padding:26px 28px;background:var(--ink);color:var(--white)}
+.law .eyebrow{color:var(--mist);padding-top:4px}
+.law p{max-width:62rem}
+@media (max-width:860px){.dual{grid-template-columns:1fr}.dual-col,.dual-col+.dual-col{padding:28px 0 0;border-left:0}.dual-col+.dual-col{border-top:1px solid var(--rule-paper);margin-top:18px}.law{grid-template-columns:1fr}}
+
+/* doctrine */
+.doctrine{overflow:hidden}
+.orb{position:absolute;z-index:-1;right:-10vw;top:-6vw;width:min(56vw,720px);aspect-ratio:1;border-radius:50%;background:repeating-linear-gradient(to bottom,rgba(246,247,253,.5) 0 2px,transparent 2px 6px);-webkit-mask:radial-gradient(circle at 34% 30%,#000 0,rgba(0,0,0,.55) 42%,rgba(0,0,0,.08) 70%,transparent 71%);mask:radial-gradient(circle at 34% 30%,#000 0,rgba(0,0,0,.55) 42%,rgba(0,0,0,.08) 70%,transparent 71%);opacity:.5;pointer-events:none}
+.articles{list-style:none;margin:clamp(44px,6vw,80px) 0 0;padding:0;border-top:1px solid var(--rule-ink)}
+.articles li{display:grid;grid-template-columns:110px minmax(0,4fr) minmax(0,6fr);gap:24px;align-items:baseline;padding:26px 0;border-bottom:1px solid var(--rule-ink)}
+.articles .num{font-family:var(--f-display);font-size:2.4rem;font-weight:300;line-height:1;color:var(--mist)}
+.articles h3{font-size:1.85rem;font-weight:400;line-height:1.08}
+.articles p{color:rgba(246,247,253,.88)}
+.aside{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:24px;margin-top:40px;align-items:baseline}
+.aside .big{font-family:var(--f-display);font-size:clamp(3.2rem,6vw,5.4rem);font-weight:300;line-height:.9;font-variant-numeric:lining-nums}
+@media (max-width:860px){.articles li{grid-template-columns:52px minmax(0,1fr)}.articles li p{grid-column:2}.aside{grid-template-columns:1fr}}
+
+/* field record */
+.record{list-style:none;margin:clamp(44px,6vw,80px) 0 0;padding:0}
+.record li{display:grid;grid-template-columns:150px minmax(0,4fr) minmax(0,7fr);gap:24px;align-items:baseline;padding:20px 0;border-top:1px solid var(--rule-paper)}
+.record li:last-child{border-bottom:1px solid var(--rule-paper)}
+.record .yr{font-family:var(--f-display);font-size:2.3rem;line-height:1;font-variant-numeric:lining-nums tabular-nums;display:flex;align-items:center;gap:14px}
+.record .yr::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;transform:translateY(-.15em)}
+.record li.next .yr::before{background:transparent;border:1px solid currentColor}
+.record h3{font-size:1.45rem;font-weight:500;line-height:1.15}
+.record p{font-size:.98rem}
+@media (max-width:860px){.record li{grid-template-columns:96px minmax(0,1fr)}.record li p{grid-column:2}.record .yr{font-size:1.8rem}}
+
+/* faq */
+.faq{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 clamp(28px,5vw,72px);margin-top:clamp(40px,5vw,64px)}
+.qa{padding:26px 0;border-top:1px solid var(--rule-paper);min-width:0}
+.qa h3{font-size:1.6rem;font-weight:500;line-height:1.12;margin-bottom:10px}
+.qa p{font-size:1rem}
+@media (max-width:860px){.faq{grid-template-columns:1fr}}
+
+/* contact */
+.contact-grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:clamp(36px,6vw,96px);margin-top:12px}
+.contact-grid h2{margin:14px 0 22px}
+.contact-grid .intro{max-width:32rem;color:rgba(246,247,253,.9)}
+.addr{margin-top:32px;display:grid;gap:14px}
+.addr div{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding-top:12px;border-top:1px solid var(--rule-ink)}
+.addr .eyebrow{min-width:7.5rem;color:var(--mist)}
+.addr code{font-family:var(--f-mono);font-size:.92rem;user-select:all}
+form{display:grid;gap:20px;align-content:start}
+.field{display:grid;gap:6px}
+.field label{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mist)}
+.field input,.field select,.field textarea{width:100%;font:inherit;font-size:1.02rem;color:var(--white);background:transparent;border:0;border-bottom:1px solid rgba(246,247,253,.4);border-radius:0;padding:10px 0;outline:0}
+.field select{appearance:none;-webkit-appearance:none;background-image:linear-gradient(45deg,transparent 50%,var(--mist) 50%),linear-gradient(135deg,var(--mist) 50%,transparent 50%);background-position:calc(100% - 12px) 55%,calc(100% - 6px) 55%;background-size:6px 6px;background-repeat:no-repeat}
+.field select option{background:var(--ink);color:var(--white)}
+.field textarea{min-height:120px;resize:vertical}
+.field input:focus,.field select:focus,.field textarea:focus{border-bottom-color:var(--white);box-shadow:0 1px 0 var(--white)}
+.two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.form-foot{display:flex;flex-wrap:wrap;align-items:center;gap:14px 20px}
+.form-foot small{font-size:.82rem;color:rgba(246,247,253,.7);max-width:30rem}
+.status{padding:14px 16px;border:1px solid var(--mist);font-size:.92rem}
+@media (max-width:860px){.contact-grid{grid-template-columns:1fr}.two{grid-template-columns:1fr}}
+@media (max-width:520px){.addr .eyebrow{flex-basis:100%}}
+
+/* sources */
+.sources{padding-block:clamp(60px,8vw,110px)}
+.sources h2{font-size:clamp(2rem,3.6vw,3rem)}
+.sources ol{margin:36px 0 0;padding:0 0 0 2.2em;columns:2;column-gap:56px;font-size:.88rem;line-height:1.5}
+.sources li{break-inside:avoid;margin:0 0 12px;padding-left:4px}
+.sources li::marker{font-family:var(--f-mono);font-size:.78rem}
+.sources li:target{background:rgba(18,16,127,.1);outline:1px solid var(--rule-paper)}
+.sources a{word-break:break-word}
+.sources .src-meta{opacity:.7}
+@media (max-width:860px){.sources ol{columns:1}}
+
+/* footer */
+.footer{position:relative;z-index:1;background:var(--ink);color:var(--white);padding:clamp(56px,8vw,96px) var(--gutter) calc(30px + env(safe-area-inset-bottom,0px));overflow:hidden}
+.footer .big{font-family:var(--f-display);font-weight:300;font-size:clamp(3rem,14.2vw,14.5rem);letter-spacing:.05em;line-height:.85;text-transform:uppercase;white-space:nowrap;margin-left:-.04em}
+.foot-row{display:flex;justify-content:space-between;gap:20px 40px;flex-wrap:wrap;margin-top:40px;padding-top:20px;border-top:1px solid var(--rule-ink);font-size:.86rem;color:rgba(246,247,253,.78)}
+.foot-row nav{display:flex;flex-wrap:wrap;gap:8px 22px}
+.foot-row nav a{font-family:var(--f-mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;text-decoration:none}
+.foot-row nav a:hover{text-decoration:underline}
+.disclaimer{max-width:46rem}
+</style>
+</head>
+<body>
+<canvas id="world" aria-hidden="true"></canvas>
+
+<header class="topbar" id="topbar">
+  <a class="brand" href="#top" aria-label="Homonoia, back to top">
+    <svg viewBox="0 0 26 24" aria-hidden="true"><g fill="currentColor"><circle cx="13" cy="3" r="2"/><circle cx="9.5" cy="9" r="2"/><circle cx="16.5" cy="9" r="2"/><circle cx="6" cy="15" r="2"/><circle cx="13" cy="15" r="2"/><circle cx="20" cy="15" r="2"/><circle cx="2.5" cy="21" r="2"/><circle cx="9.5" cy="21" r="2"/><circle cx="16.5" cy="21" r="2"/><circle cx="23.5" cy="21" r="2"/></g></svg>
+    <span class="wordmark">Homonoia</span>
+  </a>
+  <nav class="nav" id="nav" aria-label="Main">
+    <a href="#thesis">Why now</a>
+    <a href="#technology">Technology</a>
+    <a href="#systems">Systems</a>
+    <a href="#dual-use">Dual use</a>
+    <a href="#doctrine">Doctrine</a>
+    <a href="#record">Record</a>
+    <a href="#faq">FAQ</a>
+    <a class="btn small" href="#contact">Request a briefing</a>
+  </nav>
+  <button class="btn small menu-btn" id="menu-btn" type="button" aria-expanded="false" aria-controls="nav">Menu</button>
+</header>
+
+<main>
+  <!-- ============ HERO / FIG. 1 ============ -->
+  <section class="hero" id="top" data-scene="0" aria-labelledby="hero-title">
+    <div class="fig">
+      <div>Fig. 1 · Murmuration over the temple</div>
+      <div>Live simulation · <b data-t="n">2,400</b> agents · k = 7</div>
+      <div>Order <b data-t="order">0.00</b> · Mode <b data-t="mode">flock</b></div>
+      <button class="btn small pause" id="pause-btn" type="button" aria-pressed="false">Pause motion</button>
+    </div>
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="greek" lang="grc">ὁμόνοια</span><span>oneness of mind</span></p>
+      <h1 id="hero-title">Many wings.<br><em>One mind.</em></h1>
+      <p class="lede">Homonoia builds swarm autonomy. Our software and airframes let one operator direct many drones as a single system. We use it to protect cities from drone attack, and to search, map and rescue where one machine is not enough.</p>
+      <div class="cta-row">
+        <a class="btn fill-ink" href="#contact">Request a briefing <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn" href="#technology">See the swarm think</a>
+      </div>
+    </div>
+    <div class="ledger" role="list" aria-label="Key facts">
+      <div role="listitem"><div class="num">≈10,000</div><p>drones a month lost by Ukraine in 2023, most of them to electronic warfare<a class="cite" href="#s1">1</a></p></div>
+      <div role="listitem"><div class="num">6–7</div><p>neighbours a starling tracks inside a flock of thousands<a class="cite" href="#s2">2</a></p></div>
+      <div role="listitem"><div class="num">3, not 9</div><p>people needed to run a drone group once swarm software coordinates it, Ukrainian units report<a class="cite" href="#s3">3</a></p></div>
+      <div role="listitem"><div class="num">15,947</div><p>drones flown at once from a single computer. A light show, not a swarm<a class="cite" href="#s4">4</a></p></div>
+    </div>
+  </section>
+
+  <!-- ============ THESIS ============ -->
+  <section class="chapter paper grain" id="thesis" aria-labelledby="thesis-title">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Why swarms, why now</p>
+          <h2 id="thesis-title">The drone war outgrew <em>the pilot.</em></h2>
+        </div>
+        <p class="intro">Small drones now fly by the million. Each one still needs a trained pilot and an unbroken radio link, and both are running out.</p>
+      </div>
+      <div class="thesis-body">
+        <div class="prose">
+          <p class="drop">Electronic warfare breaks the link between pilot and drone. In 2023, RUSI found Russian jamming systems spread roughly every ten kilometres along the front, and estimated Ukraine was losing about 10,000 drones a month<a class="cite" href="#s1">1</a>. Every new airframe also needs another pair of trained hands.</p>
+          <p>Builders are answering with autonomy. Ukrainian FPV drones now carry terminal-guidance modules that fly the last 400–500 metres on their own, built to push through jamming<a class="cite" href="#s5">5</a>. Defenders field interceptor drones that cost from about $1,500, against an estimated $30,000–50,000 for the Shahed they hunt<a class="cite" href="#s6">6</a>.</p>
+          <p>The next step is coordination: many drones, one operator, and no single link to cut. That is what we build. Homonoia writes the software that lets drones work as a swarm, and makes an airframe designed for it. A person sets the mission and makes every decision about force.</p>
+        </div>
+        <aside class="signal" aria-label="Europe's drone wall">
+          <p class="eyebrow">Signal · European Union</p>
+          <h3>Europe is building a wall that flies.</h3>
+          <p>In October 2025 the European Commission named the European Drone Defence Initiative, first called the “drone wall”, one of four flagship defence projects<a class="cite" href="#s7">7</a>. It targets initial capability by the end of 2026 and full capability a year later<a class="cite" href="#s8">8</a>.</p>
+          <div class="big">2026</div>
+          <p class="cap">Initial capability target</p>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FIG. 2 · SPHERE ============ -->
+  <section class="window" id="concord" data-scene="1" aria-labelledby="concord-title">
+    <div class="fig">
+      <div>Fig. 2 · Sphere formation</div>
+      <div>Leaderless · slots reassigned on loss</div>
+    </div>
+    <div class="panel">
+      <p class="eyebrow">Concord</p>
+      <h2 id="concord-title">The shape is computed, not commanded.</h2>
+      <p>No drone leads. Each one reads its seven nearest neighbours, the way starlings do<a class="cite" href="#s2">2</a>, and steers by three local rules first described in 1987<a class="cite" href="#s9">9</a>. Take drones away and the rest close the gaps.</p>
+      <div class="row">
+        <button class="btn small" id="knock-btn" type="button">Knock out a quarter</button>
+        <button class="btn small" id="restore-btn" type="button">Restore all</button>
+      </div>
+      <div class="telemetry"><span>Airborne <b data-t="alive">2,400</b></span><span>Mode <b data-t="mode">sphere</b></span><span>Leader <b>none</b></span></div>
+    </div>
+  </section>
+
+  <!-- ============ TECHNOLOGY ============ -->
+  <section class="chapter ink grain" id="technology" aria-labelledby="tech-title">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Technology</p>
+          <h2 id="tech-title">How the swarm <em>thinks</em></h2>
+        </div>
+        <p class="intro">A swarm is a distributed computer that flies. Ours works in four layers, from the rule each drone follows to the intent a person gives the group.</p>
+      </div>
+
+      <div class="layers">
+        <article class="layer">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><g fill="currentColor"><circle cx="36" cy="36" r="4"/><circle cx="16" cy="22" r="2.4"/><circle cx="56" cy="20" r="2.4"/><circle cx="60" cy="46" r="2.4"/><circle cx="40" cy="62" r="2.4"/><circle cx="14" cy="50" r="2.4"/><circle cx="30" cy="12" r="2.4"/><circle cx="8" cy="34" r="2.4"/></g><g stroke="currentColor" stroke-width="1" fill="none" opacity=".7"><line x1="36" y1="36" x2="16" y2="22"/><line x1="36" y1="36" x2="56" y2="20"/><line x1="36" y1="36" x2="60" y2="46"/><line x1="36" y1="36" x2="40" y2="62"/><line x1="36" y1="36" x2="14" y2="50"/><line x1="36" y1="36" x2="30" y2="12"/><line x1="36" y1="36" x2="8" y2="34"/></g></svg>
+          <h3>Local rules</h3>
+          <p>Each drone keeps its distance, matches its neighbours’ heading and stays with the group: Reynolds’s three rules<a class="cite" href="#s9">9</a>. We limit each drone to its seven nearest neighbours, as starlings do<a class="cite" href="#s2">2</a>, so the swarm holds together as it stretches and compresses.</p>
+        </article>
+        <article class="layer">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><g stroke="currentColor" fill="none" stroke-width="1" opacity=".75"><path d="M10 40 L24 18 L42 26 L60 14 M24 18 L30 44 L42 26 L54 50 L60 14 M10 40 L30 44 L54 50 M30 44 L22 62 L54 50"/></g><g fill="currentColor"><circle cx="10" cy="40" r="2.6"/><circle cx="24" cy="18" r="2.6"/><circle cx="42" cy="26" r="2.6"/><circle cx="60" cy="14" r="2.6"/><circle cx="30" cy="44" r="2.6"/><circle cx="54" cy="50" r="2.6"/><circle cx="22" cy="62" r="2.6"/></g></svg>
+          <h3>A mesh with no leader</h3>
+          <p>Drones relay data to each other, so there is no lead aircraft to lose and no single link to jam. The US Perdix test showed it in 2016: 103 micro-drones released from fighter jets flew with no leader and adapted as drones joined or dropped out<a class="cite" href="#s10">10</a>.</p>
+        </article>
+        <article class="layer">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><g stroke="currentColor" fill="none" stroke-width="1"><path d="M36 36 L70 18 M36 36 L70 54" opacity=".75"/><path d="M58 24 Q64 36 58 48" opacity=".75"/><path d="M48 29 Q52 36 48 43" opacity=".75"/><rect x="24" y="30" width="12" height="12"/></g><g fill="currentColor"><circle cx="18" cy="36" r="3"/><circle cx="8" cy="22" r="2"/><circle cx="8" cy="50" r="2"/></g></svg>
+          <h3>Perception on board</h3>
+          <p>Every drone sees and plans for itself. Ten small drones have threaded a bamboo forest on onboard cameras and computers alone<a class="cite" href="#s11">11</a>, and thirty have flocked outdoors with no central control<a class="cite" href="#s12">12</a>. We harden these methods against jamming, darkness and the loss of satellite navigation.</p>
+        </article>
+        <article class="layer">
+          <svg viewBox="0 0 72 72" aria-hidden="true"><g stroke="currentColor" fill="none" stroke-width="1"><path d="M8 64 L20 46 L32 64 Z"/><path d="M20 46 L44 22" stroke-dasharray="3 3" opacity=".8"/><rect x="40" y="8" width="26" height="26" opacity=".75"/></g><g fill="currentColor"><circle cx="48" cy="16" r="2"/><circle cx="58" cy="18" r="2"/><circle cx="52" cy="26" r="2"/><circle cx="60" cy="28" r="2"/><circle cx="46" cy="28" r="2"/></g></svg>
+          <h3>People set intent</h3>
+          <p>An operator draws the area, sets the rules and approves actions. The swarm decides spacing, routes and who does what. Any use of force waits for a human decision.</p>
+        </article>
+      </div>
+
+      <div class="lab" id="lab">
+        <div class="lab-head">
+          <div>
+            <p class="eyebrow">Swarm lab · live</p>
+            <h3>Cut the link</h3>
+            <p>On the left, a fleet flown from one computer, like a light show. On the right, a swarm running on local rules. Cut the operator’s link and watch which one keeps working.</p>
+          </div>
+          <div class="lab-controls">
+            <button class="btn" id="lab-cut" type="button" aria-pressed="false">Cut the link</button>
+            <button class="btn" id="lab-reset" type="button">Relaunch</button>
+          </div>
+        </div>
+        <div class="lab-grid">
+          <figure class="lab-pane">
+            <figcaption><span>A · Scripted fleet</span><span class="lab-status" id="st-a" aria-live="polite">Link OK · flying the script</span></figcaption>
+            <canvas id="lab-a" role="img" aria-label="Simulation of a centrally controlled drone fleet"></canvas>
+          </figure>
+          <figure class="lab-pane">
+            <figcaption><span>B · Swarm on local rules</span><span class="lab-status" id="st-b" aria-live="polite">Link OK · orbiting objective</span></figcaption>
+            <canvas id="lab-b" role="img" aria-label="Simulation of a drone swarm using local rules"></canvas>
+          </figure>
+        </div>
+        <div class="sliders" aria-label="Swarm B rules">
+          <label for="p-sep">Separation <output id="o-sep" for="p-sep">1.6</output><input id="p-sep" type="range" min="0" max="3" step="0.1" value="1.6"></label>
+          <label for="p-ali">Alignment <output id="o-ali" for="p-ali">1.0</output><input id="p-ali" type="range" min="0" max="3" step="0.1" value="1.0"></label>
+          <label for="p-coh">Cohesion <output id="o-coh" for="p-coh">0.9</output><input id="p-coh" type="range" min="0" max="3" step="0.1" value="0.9"></label>
+          <label for="p-k">Neighbours (k) <output id="o-k" for="p-k">7</output><input id="p-k" type="range" min="1" max="20" step="1" value="7"></label>
+        </div>
+        <p class="lab-note">Click or tap a panel to move its objective while the link is up. The sliders tune swarm B: Reynolds’s three rules<a class="cite" href="#s9">9</a>, and k = 7 neighbours after field data on starlings<a class="cite" href="#s2">2</a>. A simplified teaching model, not flight code.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SYSTEMS ============ -->
+  <section class="chapter paper grain" id="systems" aria-labelledby="systems-title">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Systems</p>
+          <h2 id="systems-title">One stack, <em>three systems</em></h2>
+        </div>
+        <p class="intro">Software first, and hardware where the software needs it. CHORUS also runs on partner airframes, so a fleet can grow without being replaced.</p>
+      </div>
+      <div class="systems">
+        <article class="system">
+          <svg viewBox="0 0 320 180" role="img" aria-label="Command map: one operator assigns a search area to a swarm">
+            <rect x="1" y="1" width="318" height="178" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+            <g fill="none" stroke="currentColor" stroke-opacity=".3"><ellipse cx="96" cy="104" rx="78" ry="44"/><ellipse cx="96" cy="104" rx="52" ry="28"/><ellipse cx="96" cy="104" rx="26" ry="13"/><ellipse cx="252" cy="58" rx="56" ry="30"/><ellipse cx="252" cy="58" rx="30" ry="14"/></g>
+            <polygon points="160,40 284,50 300,140 182,152" fill="currentColor" fill-opacity=".08" stroke="currentColor" stroke-dasharray="4 4"/>
+            <g fill="currentColor"><circle cx="190" cy="64" r="2.4"/><circle cx="214" cy="60" r="2.4"/><circle cx="238" cy="66" r="2.4"/><circle cx="262" cy="62" r="2.4"/><circle cx="198" cy="90" r="2.4"/><circle cx="222" cy="86" r="2.4"/><circle cx="246" cy="92" r="2.4"/><circle cx="272" cy="88" r="2.4"/><circle cx="204" cy="116" r="2.4"/><circle cx="228" cy="112" r="2.4"/><circle cx="252" cy="118" r="2.4"/><circle cx="278" cy="114" r="2.4"/><circle cx="214" cy="138" r="2.4"/><circle cx="258" cy="140" r="2.4"/></g>
+            <path d="M28 166 L38 150 L48 166 Z" fill="currentColor"/>
+            <line x1="38" y1="150" x2="182" y2="104" stroke="currentColor" stroke-opacity=".55" stroke-dasharray="2 3"/>
+            <text x="56" y="165" fill="currentColor">OPERATOR · 1</text>
+            <text x="170" y="32" fill="currentColor">SEARCH AREA · 14 DRONES</text>
+          </svg>
+          <p class="eyebrow">Command</p>
+          <h3>Agora<small>the assembly place</small></h3>
+          <p>Mission software for one operator and many drones. Draw an area, set rules and limits, approve actions. Every command and every machine decision goes into the mission record.</p>
+          <dl class="spec">
+            <dt>Operators</dt><dd>1 per swarm</dd>
+            <dt>Drones</dt><dd>up to 100 per operator</dd>
+            <dt>Runs on</dt><dd>rugged laptop or tablet, offline</dd>
+            <dt>Interfaces</dt><dd>MAVLink, open API</dd>
+            <dt>Record</dt><dd>signed, tamper-evident log</dd>
+          </dl>
+        </article>
+        <article class="system">
+          <svg viewBox="0 0 320 180" role="img" aria-label="Autonomy graph: each drone linked to its seven nearest neighbours">
+            <rect x="1" y="1" width="318" height="178" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+            <circle cx="160" cy="92" r="58" fill="none" stroke="currentColor" stroke-opacity=".35" stroke-dasharray="3 4"/>
+            <g stroke="currentColor" stroke-opacity=".7" fill="none"><line x1="160" y1="92" x2="122" y2="62"/><line x1="160" y1="92" x2="176" y2="48"/><line x1="160" y1="92" x2="206" y2="76"/><line x1="160" y1="92" x2="204" y2="120"/><line x1="160" y1="92" x2="168" y2="140"/><line x1="160" y1="92" x2="118" y2="126"/><line x1="160" y1="92" x2="108" y2="94"/></g>
+            <g stroke="currentColor" stroke-opacity=".22" fill="none"><line x1="122" y1="62" x2="70" y2="44"/><line x1="176" y1="48" x2="236" y2="30"/><line x1="206" y1="76" x2="262" y2="70"/><line x1="204" y1="120" x2="256" y2="138"/><line x1="168" y1="140" x2="150" y2="166"/><line x1="118" y1="126" x2="64" y2="140"/><line x1="108" y1="94" x2="46" y2="90"/><line x1="70" y1="44" x2="46" y2="90"/><line x1="236" y1="30" x2="262" y2="70"/><line x1="256" y1="138" x2="262" y2="70"/><line x1="64" y1="140" x2="46" y2="90"/></g>
+            <g fill="currentColor"><circle cx="160" cy="92" r="5"/><circle cx="122" cy="62" r="3"/><circle cx="176" cy="48" r="3"/><circle cx="206" cy="76" r="3"/><circle cx="204" cy="120" r="3"/><circle cx="168" cy="140" r="3"/><circle cx="118" cy="126" r="3"/><circle cx="108" cy="94" r="3"/><circle cx="70" cy="44" r="2.4" fill-opacity=".6"/><circle cx="236" cy="30" r="2.4" fill-opacity=".6"/><circle cx="262" cy="70" r="2.4" fill-opacity=".6"/><circle cx="256" cy="138" r="2.4" fill-opacity=".6"/><circle cx="150" cy="166" r="2.4" fill-opacity=".6"/><circle cx="64" cy="140" r="2.4" fill-opacity=".6"/><circle cx="46" cy="90" r="2.4" fill-opacity=".6"/></g>
+            <text x="12" y="20" fill="currentColor">K = 7 NEAREST · NO LEADER</text>
+          </svg>
+          <p class="eyebrow">Autonomy</p>
+          <h3>Chorus<small>many voices, one movement</small></h3>
+          <p>The software on every drone: flocking, task sharing, mesh networking and navigation without satellites. If a drone loses contact it stays inside approved limits, takes no new action and comes home.</p>
+          <dl class="spec">
+            <dt>Neighbours</dt><dd>7 nearest (topological)</dd>
+            <dt>Navigation</dt><dd>visual-inertial; GNSS optional</dd>
+            <dt>Network</dt><dd>self-healing mesh, frequency-agile</dd>
+            <dt>Compute</dt><dd>under 10 W on board</dd>
+            <dt>Link loss</dt><dd>hold limits, no new engagement, return</dd>
+          </dl>
+        </article>
+        <article class="system">
+          <svg viewBox="0 0 320 180" role="img" aria-label="Top-view drawing of the Skia quadrotor with dimension line">
+            <rect x="1" y="1" width="318" height="178" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+            <g stroke="currentColor" fill="none">
+              <line x1="112" y1="38" x2="208" y2="128" stroke-width="5"/><line x1="208" y1="38" x2="112" y2="128" stroke-width="5"/>
+              <circle cx="112" cy="38" r="26" stroke-opacity=".55"/><circle cx="208" cy="38" r="26" stroke-opacity=".55"/><circle cx="112" cy="128" r="26" stroke-opacity=".55"/><circle cx="208" cy="128" r="26" stroke-opacity=".55"/>
+              <circle cx="112" cy="38" r="17" stroke-opacity=".25" stroke-dasharray="2 3"/><circle cx="208" cy="38" r="17" stroke-opacity=".25" stroke-dasharray="2 3"/><circle cx="112" cy="128" r="17" stroke-opacity=".25" stroke-dasharray="2 3"/><circle cx="208" cy="128" r="17" stroke-opacity=".25" stroke-dasharray="2 3"/>
+            </g>
+            <rect x="144" y="66" width="32" height="34" fill="currentColor" fill-opacity=".14" stroke="currentColor"/>
+            <path d="M160 52 L167 62 L153 62 Z" fill="currentColor"/>
+            <g fill="currentColor"><circle cx="112" cy="38" r="4"/><circle cx="208" cy="38" r="4"/><circle cx="112" cy="128" r="4"/><circle cx="208" cy="128" r="4"/></g>
+            <g stroke="currentColor" stroke-opacity=".7"><line x1="86" y1="166" x2="234" y2="166"/><line x1="86" y1="160" x2="86" y2="172"/><line x1="234" y1="160" x2="234" y2="172"/></g>
+            <text x="160" y="161" text-anchor="middle" fill="currentColor">≈ 330 MM</text>
+            <text x="244" y="86" fill="currentColor">NOSE BAY</text>
+            <line x1="176" y1="83" x2="240" y2="83" stroke="currentColor" stroke-opacity=".5"/>
+          </svg>
+          <p class="eyebrow">Airframe</p>
+          <h3>Skia<small>σκιά, the shadow</small></h3>
+          <p>A light quadrotor designed for mass production, with a swappable nose bay for each mission: search, interception, or civil relay and drop.</p>
+          <dl class="spec">
+            <dt>Class</dt><dd>quadrotor, under 2 kg</dd>
+            <dt>Variants</dt><dd>R search · I interceptor · C civil</dd>
+            <dt>Endurance</dt><dd>35 min (R) · 12 min (I)</dd>
+            <dt>Dash</dt><dd>250+ km/h (I)</dd>
+            <dt>Unit cost</dt><dd>under $2,000 at volume</dd>
+          </dl>
+        </article>
+      </div>
+      <p class="note">Specifications are design targets, not test results.</p>
+    </div>
+  </section>
+
+  <!-- ============ FIG. 3 · LATTICE ============ -->
+  <section class="window right" id="sweep" data-scene="2" aria-labelledby="sweep-title">
+    <div class="fig">
+      <div>Fig. 3 · Search lattice at night</div>
+      <div>One operator · parallel sweep</div>
+    </div>
+    <div class="panel">
+      <p class="eyebrow">One operator</p>
+      <h2 id="sweep-title">A whole hillside, searched at once.</h2>
+      <p>Hand-flown drones need a pilot each. With swarm software, Ukrainian units report running a drone group with three people instead of nine<a class="cite" href="#s3">3</a>. We design for one operator per swarm, with the drones dividing the ground between them and sweeping it in parallel.</p>
+      <div class="telemetry"><span>Mode <b data-t="mode">lattice</b></span><span>Airborne <b data-t="alive">2,400</b></span><span>Operators <b>1</b></span></div>
+    </div>
+  </section>
+
+  <!-- ============ DUAL USE ============ -->
+  <section class="chapter paper grain" id="dual-use" aria-labelledby="dual-title">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Dual use</p>
+          <h2 id="dual-title">The swarm that guards a city can <em>search a forest.</em></h2>
+        </div>
+        <p class="intro">The autonomy is the same. The payload, the rules and the customer change.</p>
+      </div>
+      <div class="dual">
+        <div class="dual-col">
+          <h3 class="side">Defence</h3>
+          <p class="eyebrow">Protect people and infrastructure</p>
+          <div class="use">
+            <h3>Counter-drone interception</h3>
+            <p>Cheap interceptors against one-way attack drones. Interceptor drones cost about $1,500 to $16,000 depending on the model; the Shahed they hunt costs an estimated $30,000–50,000 to build<a class="cite" href="#s6">6</a>. A swarm covers more sky than a lone interceptor.</p>
+          </div>
+          <div class="use">
+            <h3>Reconnaissance under jamming</h3>
+            <p>Sensing that keeps working when links fail, where single drones have been lost by the thousand<a class="cite" href="#s1">1</a>.</p>
+          </div>
+          <div class="use">
+            <h3>Layered air defence</h3>
+            <p>Mobile sensor and interceptor layers for programmes such as the European Drone Defence Initiative<a class="cite" href="#s7">7</a>.</p>
+          </div>
+        </div>
+        <div class="dual-col">
+          <h3 class="side">Civil</h3>
+          <p class="eyebrow">Find, map and reach people faster</p>
+          <div class="use">
+            <h3>Search and rescue</h3>
+            <p>Speed from the air already saves minutes. In Sweden, drones delivered defibrillators before the ambulance in 67% of suspected cardiac arrests, a median 3 min 14 s sooner<a class="cite" href="#s13">13</a>. A swarm searches many places at once.</p>
+          </div>
+          <div class="use">
+            <h3>Demining survey</h3>
+            <p>UN mine-action experts estimate 139,000 km² of Ukraine, over a fifth of its land, is contaminated by mines or unexploded ordnance<a class="cite" href="#s14">14</a>. Swarms map suspect ground from the air so deminers know where to start.</p>
+          </div>
+          <div class="use">
+            <h3>Disaster mapping</h3>
+            <p>Many cameras build one live map of a flood, fire or earthquake zone, and crews work from it while the drones keep it current.</p>
+          </div>
+        </div>
+      </div>
+      <div class="law">
+        <p class="eyebrow">The law</p>
+        <p>Dual use is a legal category. EU Regulation 2021/821 covers items, including software and technology, that can be used for both civil and military purposes, and requires authorisation to export them<a class="cite" href="#s15">15</a>. We build for it: geofencing, end-use controls and full mission records in every system.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DOCTRINE ============ -->
+  <section class="chapter ink grain doctrine" id="doctrine" aria-labelledby="doctrine-title">
+    <div class="orb" aria-hidden="true"></div>
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Doctrine</p>
+          <h2 id="doctrine-title">What we will build, <em>and what we won’t.</em></h2>
+        </div>
+        <p class="intro">Autonomy changes who decides. These five commitments are built into our software and our sales.</p>
+      </div>
+      <ol class="articles">
+        <li><span class="num" aria-hidden="true">I</span><h3>A person decides on force.</h3><p>Our systems search, track and intercept drones. Engaging any target needs a human decision. This follows the principle in US policy that weapons allow “appropriate levels of human judgment over the use of force”<a class="cite" href="#s16">16</a>.</p></li>
+        <li><span class="num" aria-hidden="true">II</span><h3>Limits are hard-coded.</h3><p>Every mission carries limits on area, time and behaviour. A drone that loses contact stays inside them, makes no new engagement and returns.</p></li>
+        <li><span class="num" aria-hidden="true">III</span><h3>Everything is recorded.</h3><p>Commands, detections and machine decisions are logged and can be reviewed after every mission.</p></li>
+        <li><span class="num" aria-hidden="true">IV</span><h3>Protection comes first.</h3><p>We build for interception, reconnaissance, and search and rescue.</p></li>
+        <li><span class="num" aria-hidden="true">V</span><h3>We choose our customers.</h3><p>We sell to democratic governments, their armed forces and civil agencies, under export authorisation<a class="cite" href="#s15">15</a>.</p></li>
+      </ol>
+      <div class="aside">
+        <div class="big">164 states</div>
+        <p>The rules are still being written. In December 2025 the UN General Assembly adopted a resolution on lethal autonomous weapons systems<a class="cite" href="#s17">17</a> by 164 votes to 6, with 7 abstentions<a class="cite" href="#s18">18</a>. We expect to be held to whatever comes next, and we design for it now.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FIELD RECORD ============ -->
+  <section class="chapter paper grain" id="record" aria-labelledby="record-title">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Field record</p>
+          <h2 id="record-title">From boids <em>to the front line</em></h2>
+        </div>
+        <p class="intro">Four decades of research and field tests, in order. Every entry links to its source.</p>
+      </div>
+      <ol class="record">
+        <li><span class="yr">1987</span><h3>Boids</h3><p>Craig Reynolds shows that flocking emerges from three local rules, with no leader and no script<a class="cite" href="#s9">9</a>.</p></li>
+        <li><span class="yr">2008</span><h3>Seven neighbours</h3><p>A field study of starling flocks finds each bird tracks about six or seven neighbours, not everyone within a set distance<a class="cite" href="#s2">2</a>.</p></li>
+        <li><span class="yr">2014</span><h3>1,024 robots</h3><p>Harvard’s Kilobots self-assemble into complex shapes with no central control<a class="cite" href="#s19">19</a>.</p></li>
+        <li><span class="yr">2016</span><h3>Perdix</h3><p>Three F/A-18s release 103 micro-drones that fly as one leaderless swarm over China Lake, California<a class="cite" href="#s10">10</a>.</p></li>
+        <li><span class="yr">2017</span><h3>OFFSET</h3><p>DARPA starts work on swarms of 250 or more air and ground robots for small units in cities<a class="cite" href="#s20">20</a>.</p></li>
+        <li><span class="yr">2018</span><h3>Thirty in the open</h3><p>Thirty drones flock outdoors with collision avoidance and no central control<a class="cite" href="#s12">12</a>.</p></li>
+        <li><span class="yr">2022</span><h3>Into the forest</h3><p>Ten small drones cross a bamboo forest using only onboard sensing and planning<a class="cite" href="#s11">11</a>.</p></li>
+        <li><span class="yr">2023</span><h3>Replicator</h3><p>The US Department of Defense sets a goal of fielding multiple thousands of attritable autonomous systems within 18 to 24 months<a class="cite" href="#s21">21</a>.</p></li>
+        <li><span class="yr">2025</span><h3>Swarms in combat</h3><p>Ukrainian units report using swarm software more than 100 times, typically with three drones, sometimes eight, and up to 25 in tests<a class="cite" href="#s3">3</a>.</p></li>
+        <li><span class="yr">2025</span><h3>15,947 lights</h3><p>A light show sets the record for drones flown at once from a single computer<a class="cite" href="#s4">4</a>.</p></li>
+        <li><span class="yr">2025</span><h3>A wall that flies</h3><p>The European Commission names the European Drone Defence Initiative a flagship project<a class="cite" href="#s7">7</a>.</p></li>
+        <li class="next"><span class="yr">2026</span><h3>Initial capability</h3><p>The EU initiative’s target for first capability is the end of this year<a class="cite" href="#s8">8</a>.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- ============ FAQ ============ -->
+  <section class="chapter paper grain" id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <p class="eyebrow">Questions</p>
+      <h2 id="faq-title">Asked in every <em>briefing</em></h2>
+      <div class="faq">
+        <div class="qa"><h3>Is a swarm just a big light show?</h3><p>No. A light show flies paths written in advance, from one computer: the record is 15,947 drones from a single machine<a class="cite" href="#s4">4</a>. If that computer or its link fails, the show is over. A swarm carries its coordination on board.</p></div>
+        <div class="qa"><h3>What happens when the link is jammed?</h3><p>The drones keep their formation and keep flying the last approved task, inside its limits. They make no new engagement without a person, and they come home when the mission clock runs out. The lab above shows the idea.</p></div>
+        <div class="qa"><h3>Are swarms real yet?</h3><p>Early, but real. Ukrainian units report using swarm software in combat more than 100 times, typically with three drones and sometimes eight, and testing groups of 25<a class="cite" href="#s3">3</a>. Large swarms are still ahead of us, and that is the work.</p></div>
+        <div class="qa"><h3>Who decides to use force?</h3><p>A person, every time. It is the first article of our doctrine and it follows the principle of “appropriate levels of human judgment over the use of force” in US policy<a class="cite" href="#s16">16</a>.</p></div>
+        <div class="qa"><h3>Can civil agencies buy?</h3><p>Yes. Search and rescue, demining survey and disaster mapping use the same autonomy with civil payloads and civil rules of operation.</p></div>
+        <div class="qa"><h3>Where do you sell?</h3><p>To democratic governments, their armed forces and civil agencies, with export authorisation under EU dual-use rules where they apply<a class="cite" href="#s15">15</a>.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FIG. 4 · CLOUD ============ -->
+  <section class="window right coda" id="coda" data-scene="3" aria-labelledby="coda-title">
+    <div class="fig">
+      <div>Fig. 4 · Cloud formation over the sea</div>
+      <div>The same swarm, at rest</div>
+    </div>
+    <div class="panel">
+      <p class="eyebrow"><span class="greek" lang="grc">ὁμόνοια</span> · oneness of mind, concord<a class="cite" href="#s22">22</a></p>
+      <h2 id="coda-title">The Greeks prayed for concord. <em>We engineer it.</em></h2>
+      <div class="row">
+        <a class="btn fill-white" href="#contact">Request a briefing <span class="arrow" aria-hidden="true">→</span></a>
+        <a class="btn" href="#contact">Join the team</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONTACT ============ -->
+  <section class="chapter deep grain" id="contact" aria-labelledby="contact-title">
+    <div class="wrap contact-grid">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h2 id="contact-title">Request a <em>briefing</em></h2>
+        <p class="intro">For defence ministries, armed forces, civil-protection agencies, investors and engineers who want to build this with us. In person or remote.</p>
+        <div class="addr">
+          <div><span class="eyebrow">Briefings</span><code id="mail-brief">briefings@homonoia.example</code><button class="btn small" type="button" data-copy="mail-brief">Copy</button></div>
+          <div><span class="eyebrow">Careers</span><code id="mail-jobs">careers@homonoia.example</code><button class="btn small" type="button" data-copy="mail-jobs">Copy</button></div>
+          <div><span class="eyebrow">Press</span><code id="mail-press">press@homonoia.example</code><button class="btn small" type="button" data-copy="mail-press">Copy</button></div>
+        </div>
+      </div>
+      <form id="brief-form" novalidate>
+        <div class="two">
+          <div class="field"><label for="f-name">Name</label><input id="f-name" name="name" autocomplete="name" required></div>
+          <div class="field"><label for="f-org">Organisation</label><input id="f-org" name="org" autocomplete="organization" required></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="f-email">Work email</label><input id="f-email" name="email" type="email" autocomplete="email" required></div>
+          <div class="field"><label for="f-role">I am with</label>
+            <select id="f-role" name="role">
+              <option>A defence ministry or armed force</option>
+              <option>A civil-protection or rescue agency</option>
+              <option>An investor</option>
+              <option>Engineering talent</option>
+              <option>The press</option>
+            </select>
+          </div>
+        </div>
+        <div class="field"><label for="f-msg">What should the briefing cover?</label><textarea id="f-msg" name="message" rows="4"></textarea></div>
+        <div class="form-foot">
+          <button class="btn fill-white" type="submit">Send request <span class="arrow" aria-hidden="true">→</span></button>
+          <small>Prototype page: this form is not connected yet. Use an address on the left.</small>
+        </div>
+        <p class="status" id="form-status" role="status" hidden></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ SOURCES ============ -->
+  <section class="chapter paper sources" id="sources" aria-labelledby="sources-title">
+    <div class="wrap">
+      <p class="eyebrow">Sources</p>
+      <h2 id="sources-title">Every claim, <em>cited</em></h2>
+      <ol>
+        <li id="s1">Watling, J. &amp; Reynolds, N. <a href="https://rusi.org/explore-our-research/publications/special-resources/meatgrinder-russian-tactics-second-year-its-invasion-ukraine" target="_blank" rel="noopener">Meatgrinder: Russian Tactics in the Second Year of Its Invasion of Ukraine</a>. <span class="src-meta">RUSI, May 2023.</span></li>
+        <li id="s2">Ballerini, M. et al. <a href="https://www.pnas.org/doi/10.1073/pnas.0711437105" target="_blank" rel="noopener">Interaction ruling animal collective behavior depends on topological rather than metric distance</a>. <span class="src-meta">PNAS 105(4), 2008.</span></li>
+        <li id="s3"><a href="https://www.pravda.com.ua/eng/news/2025/09/03/7529154/" target="_blank" rel="noopener">Ukrainian forces using drone swarms that autonomously locate and strike targets</a>, reporting The Wall Street Journal. <span class="src-meta">Ukrainska Pravda, 3 Sep 2025.</span></li>
+        <li id="s4">Guinness World Records, <a href="https://www.guinnessworldrecords.com/world-records/657119-most-multirotor-drones-airborne-simultaneously-from-a-single-computer%C2%A0outdoors" target="_blank" rel="noopener">Most multirotor/drones airborne simultaneously from a single computer (outdoors)</a>; <a href="https://www.notebookcheck.net/Two-world-records-set-as-15-947-drones-light-up-the-sky-in-Liuyang.1143709.0.html" target="_blank" rel="noopener">15,947 drones in Liuyang</a>. <span class="src-meta">Notebookcheck, Oct 2025.</span></li>
+        <li id="s5"><a href="https://www.kyivpost.com/post/60152" target="_blank" rel="noopener">‘Fire and Forget’: Ukraine Rolls Out FPV Drones With Autonomous Terminal Guidance</a>. <span class="src-meta">Kyiv Post, 2025.</span></li>
+        <li id="s6"><a href="https://news.liga.net/en/politics/news/interceptor-drones-are-significantly-cheaper-than-shaheds-what-are-the-prices" target="_blank" rel="noopener">Interceptor drones are significantly cheaper than Shaheds: what are the prices</a>. <span class="src-meta">LIGA.net.</span></li>
+        <li id="s7">European Commission, <a href="https://defence-industry-space.ec.europa.eu/commission-and-high-representative-present-new-defence-roadmap-strengthen-european-defence-2025-10-16_en" target="_blank" rel="noopener">Commission and High Representative present new Defence Roadmap</a> (Preserving Peace, Defence Readiness Roadmap 2030). <span class="src-meta">16 Oct 2025.</span></li>
+        <li id="s8">Reuters, <a href="https://www.streetinsider.com/Reuters/EU+proposes+%27flagship%27+defence+projects+to+counter+drones%2C+protect+eastern+border/25466206.html" target="_blank" rel="noopener">EU proposes ‘flagship’ defence projects to counter drones, protect eastern border</a>. <span class="src-meta">16 Oct 2025, via StreetInsider.</span></li>
+        <li id="s9">Reynolds, C. W. <a href="https://www.cs.princeton.edu/courses/archive/spr01/cs598b/papers/reynolds87.pdf" target="_blank" rel="noopener">Flocks, Herds, and Schools: A Distributed Behavioral Model</a>. <span class="src-meta">Computer Graphics 21(4), SIGGRAPH 1987.</span></li>
+        <li id="s10">US Department of Defense, <a href="https://www.pacom.mil/Media/News/News-Articles/Article/1046043/department-of-defense-announces-successful-micro-drone-demonstration/" target="_blank" rel="noopener">Department of Defense Announces Successful Micro-Drone Demonstration</a>. <span class="src-meta">Jan 2017.</span></li>
+        <li id="s11">AAAS, <a href="https://www.aaas.org/news/flight-planning-system-lets-tiny-drones-swarm-dense-forests-and-busy-airspace" target="_blank" rel="noopener">Flight planning system lets tiny drones swarm dense forests and busy airspace</a>, on Zhou, X. et al., Swarm of micro flying robots in the wild. <span class="src-meta">Science Robotics, May 2022.</span></li>
+        <li id="s12">Vásárhelyi, G. et al. <a href="https://hal.elte.hu/drones/scirob2018.html" target="_blank" rel="noopener">Optimized flocking of autonomous drones in confined environments</a>. <span class="src-meta">Science Robotics 3(20), 2018.</span></li>
+        <li id="s13">Karolinska Institutet, <a href="https://news.ki.se/drones-enabled-the-use-of-defibrillators-before-ambulance-arrival" target="_blank" rel="noopener">Drones enabled the use of defibrillators before ambulance arrival</a>, on Schierbeck, S. et al. <span class="src-meta">The Lancet Digital Health, Nov 2023.</span></li>
+        <li id="s14">UN News, <a href="https://news.un.org/en/story/2025/06/1164121" target="_blank" rel="noopener">Ukraine’s unexploded mine problem</a> (UNMAS estimate). <span class="src-meta">Jun 2025.</span></li>
+        <li id="s15">EUR-Lex, <a href="https://eur-lex.europa.eu/EN/legal-content/summary/dual-use-export-controls.html" target="_blank" rel="noopener">Dual-use export controls: summary of Regulation (EU) 2021/821</a>.</li>
+        <li id="s16">US Department of Defense, <a href="https://www.esd.whs.mil/Portals/54/Documents/DD/issuances/dodd/300009p.PDF" target="_blank" rel="noopener">DoD Directive 3000.09, Autonomy in Weapon Systems</a>. <span class="src-meta">25 Jan 2023.</span></li>
+        <li id="s17">United Nations, <a href="https://digitallibrary.un.org/record/4095989?ln=en" target="_blank" rel="noopener">Lethal autonomous weapons systems: resolution adopted by the General Assembly (A/RES/80/57)</a>. <span class="src-meta">Dec 2025.</span></li>
+        <li id="s18">Stop Killer Robots, <a href="https://stopkillerrobots.org/news/164-states-vote-against-the-machine" target="_blank" rel="noopener">164 states vote against the machine</a>. <span class="src-meta">Dec 2025.</span></li>
+        <li id="s19">Harvard SEAS, <a href="https://seas.harvard.edu/news/self-organizing-thousand-robot-swarm" target="_blank" rel="noopener">A self-organizing thousand-robot swarm</a>, on Rubenstein, M. et al. <span class="src-meta">Science, Aug 2014.</span></li>
+        <li id="s20">DARPA, <a href="https://www.darpa.mil/research/programs/offensive-swarm-enabled-tactics" target="_blank" rel="noopener">OFFensive Swarm-Enabled Tactics (OFFSET)</a>; <a href="https://www.c4isrnet.com/unmanned/uas/2017/10/24/darpa-we-want-autonomous-drone-swarms-for-war-fighters/" target="_blank" rel="noopener">DARPA: we want autonomous drone swarms for war fighters</a>. <span class="src-meta">C4ISRNET, Oct 2017.</span></li>
+        <li id="s21"><a href="https://defensescoop.com/2023/08/28/hicks-unveils-dods-new-replicator-initiative-to-counter-china-via-autonomous-tech/" target="_blank" rel="noopener">Hicks unveils DOD’s new Replicator initiative</a>. <span class="src-meta">DefenseScoop, 28 Aug 2023.</span></li>
+        <li id="s22">Liddell, Scott &amp; Jones, <a href="https://lsj.gr/wiki/%E1%BD%81%CE%BC%CF%8C%CE%BD%CE%BF%CE%B9%CE%B1" target="_blank" rel="noopener">Greek–English Lexicon: ὁμόνοια</a>.</li>
+      </ol>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="big" aria-hidden="true">Homonoia</div>
+  <div class="foot-row">
+    <p class="disclaimer">Concept site. Homonoia, its products and their specifications are illustrative; facts about the world are cited in the sources above. © 2026</p>
+    <nav aria-label="Footer">
+      <a href="#technology">Technology</a><a href="#systems">Systems</a><a href="#doctrine">Doctrine</a><a href="#sources">Sources</a><a href="#contact">Contact</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+'use strict';
+
+/* ================================================================
+   small helpers
+   ================================================================ */
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const fmt = n => n.toLocaleString('en-US');
+
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function hash2(ix, iy) {
+  let h = Math.imul(ix | 0, 374761393) ^ Math.imul(iy | 0, 668265263);
+  h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+function vnoise(x, y) {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  return lerp(lerp(hash2(ix, iy), hash2(ix + 1, iy), ux), lerp(hash2(ix, iy + 1), hash2(ix + 1, iy + 1), ux), uy);
+}
+function fbm(x, y) { let s = 0, a = .5, f = 1; for (let i = 0; i < 4; i++) { s += a * vnoise(x * f, y * f); f *= 2.03; a *= .5; } return s; }
+
+/* ================================================================
+   page chrome: grain, top bar, menu, citations, form, copy
+   ================================================================ */
+(function grain() {
+  try {
+    const c = document.createElement('canvas'); c.width = c.height = 180;
+    const g = c.getContext('2d'); const img = g.createImageData(180, 180);
+    for (let i = 0; i < img.data.length; i += 4) { const v = Math.random() * 255 | 0; img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255; }
+    g.putImageData(img, 0, 0);
+    document.documentElement.style.setProperty('--grain', 'url(' + c.toDataURL('image/png') + ')');
+  } catch (e) { /* decorative only */ }
+})();
+
+const topbar = $('#topbar'), heroEl = $('#top');
+let sTick = false;
+function onScroll() {
+  if (sTick) return; sTick = true;
+  requestAnimationFrame(() => { topbar.classList.toggle('solid', window.scrollY > heroEl.offsetHeight - 80); sTick = false; });
+}
+addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+const nav = $('#nav'), menuBtn = $('#menu-btn');
+function setMenu(open) {
+  nav.classList.toggle('open', open);
+  menuBtn.setAttribute('aria-expanded', String(open));
+  menuBtn.textContent = open ? 'Close' : 'Menu';
+  topbar.classList.toggle('solid', open || window.scrollY > heroEl.offsetHeight - 80);
+}
+menuBtn.addEventListener('click', () => setMenu(!nav.classList.contains('open')));
+nav.addEventListener('click', e => { if (e.target.closest('a')) setMenu(false); });
+addEventListener('keydown', e => { if (e.key === 'Escape' && nav.classList.contains('open')) setMenu(false); });
+
+$$('a.cite').forEach(a => {
+  const li = document.getElementById(a.getAttribute('href').slice(1));
+  if (li) { const t = li.textContent.replace(/\s+/g, ' ').trim(); a.title = t; a.setAttribute('aria-label', 'Source ' + a.textContent + ': ' + t); }
+});
+
+$('#brief-form').addEventListener('submit', e => {
+  e.preventDefault();
+  const f = e.currentTarget, st = $('#form-status');
+  if (!f.checkValidity()) { f.reportValidity(); return; }
+  st.textContent = 'Not sent. This prototype form is not connected to an inbox yet, so please copy one of the addresses on the left.';
+  st.hidden = false;
+});
+
+$$('[data-copy]').forEach(b => b.addEventListener('click', () => {
+  const el = document.getElementById(b.dataset.copy), text = el.textContent.trim();
+  const done = label => { b.textContent = label; setTimeout(() => { b.textContent = 'Copy'; }, 1600); };
+  const select = () => { const r = document.createRange(); r.selectNodeContents(el); const s = getSelection(); s.removeAllRanges(); s.addRange(r); done('Selected'); };
+  try { navigator.clipboard.writeText(text).then(() => done('Copied'), select); } catch (err) { select(); }
+}));
+
+/* ================================================================
+   THE WORLD: temple, land, sea and a 2,400-drone swarm,
+   rendered in grey and mapped to ultramarine stipple in post
+   ================================================================ */
+let world = null;
+try { world = startWorld(); } catch (err) { console.warn('3D scene unavailable:', err); }
+if (!world) document.documentElement.classList.add('no-webgl');
+if (world && location.protocol === 'file:') window.__world = world;
+
+function startWorld() {
+  const T = window.THREE;
+  if (!T) throw new Error('three.js did not load');
+  const canvas = $('#world');
+  const renderer = new T.WebGLRenderer({ canvas, antialias: false, alpha: false, stencil: false, powerPreference: 'high-performance' });
+  const small = Math.min(innerWidth, innerHeight) < 700;
+  const PR = Math.min(window.devicePixelRatio || 1, small ? 1.25 : 1.5);
+  if (!renderer.capabilities.isWebGL2 && !(renderer.extensions.has('WEBGL_depth_texture') && renderer.extensions.has('OES_element_index_uint'))) { renderer.dispose(); throw new Error('WebGL features missing'); }
+  renderer.setPixelRatio(1);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = T.PCFSoftShadowMap;
+  renderer.shadowMap.autoUpdate = false;
+  renderer.setClearColor(0xffffff, 1);
+
+  const scene = new T.Scene();
+  const camera = new T.PerspectiveCamera(32, 16 / 9, .5, 3000);
+  const mirror = new T.PerspectiveCamera(32, 16 / 9, .5, 3000);
+
+  /* ---------- terrain field ---------- */
+  const PY = 5.6;                       // plateau the temple stands on
+  function seaMask(x, z) {
+    const d = (x - 14) * .7071 + (z - 18) * .7071 + (vnoise(x * .02 + 7, z * .02 - 3) - .5) * 16;
+    return smooth(-5, 9, d);
+  }
+  function landH(x, z) {
+    let h = 5 + 9 * (fbm(x * .0045 + 3.1, z * .0045 - 1.7) - .35) + 3.2 * (fbm(x * .018 - 4, z * .018 + 9) - .45);
+    h += 6.0 * Math.exp(-(((x + 34) / 15) ** 2 + ((z - 18) / 8) ** 2));     // dune in front of the temple (hero)
+    h += 7.0 * Math.exp(-(((x - 2) / 26) ** 2 + ((z + 60) / 16) ** 2));     // ridge behind
+    h += 9.0 * Math.exp(-(((x + 70) / 30) ** 2 + ((z + 30) / 22) ** 2));    // hill west
+    return h;
+  }
+  function terrainH(x, z) {
+    let h = landH(x, z);
+    h = lerp(h, -5 - 3 * vnoise(x * .05, z * .05), seaMask(x, z));
+    const qx = Math.max(Math.abs(x) - 23, 0), qz = Math.max(Math.abs(z) - 12, 0);
+    const pm = 1 - smooth(1, 16, Math.hypot(qx, qz));
+    return lerp(h, PY - .05, pm);
+  }
+
+  function buildTerrain() {
+    const S = small ? 170 : 250, half = 1300, row = S + 1;
+    const pos = new Float32Array(row * row * 3);
+    let k = 0;
+    for (let j = 0; j <= S; j++) {
+      const v = j / S * 2 - 1, z = Math.sign(v) * v * v * half;
+      for (let i = 0; i <= S; i++) {
+        const u = i / S * 2 - 1, x = Math.sign(u) * u * u * half;
+        pos[k++] = x; pos[k++] = terrainH(x, z); pos[k++] = z;
+      }
+    }
+    const idx = new Uint32Array(S * S * 6); let n = 0;
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const a = j * row + i, b = a + 1, c = a + row, d = c + 1;
+      idx[n++] = a; idx[n++] = c; idx[n++] = b; idx[n++] = b; idx[n++] = c; idx[n++] = d;
+    }
+    const g = new T.BufferGeometry();
+    g.setAttribute('position', new T.BufferAttribute(pos, 3));
+    g.setIndex(new T.BufferAttribute(idx, 1));
+    g.computeVertexNormals();
+    const m = new T.Mesh(g, new T.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 1, metalness: 0 }));
+    m.receiveShadow = true;
+    return m;
+  }
+  scene.add(buildTerrain());
+
+  /* ---------- sky ---------- */
+  const skyMat = new T.ShaderMaterial({
+    uniforms: { uZen: { value: .7 }, uHor: { value: .93 }, uGlow: { value: .1 }, uSun: { value: new T.Vector3(0, 1, 0) } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; gl_Position.z = gl_Position.w; }',
+    fragmentShader: [
+      'uniform float uZen, uHor, uGlow; uniform vec3 uSun; varying vec3 vW;',
+      'void main(){',
+      '  vec3 d = normalize(vW - cameraPosition);',
+      '  float h = max(d.y, 0.0);',
+      '  float l = mix(uHor, uZen, pow(h, 0.55));',
+      '  l += uGlow * pow(max(dot(d, normalize(uSun)), 0.0), 10.0);',
+      '  gl_FragColor = vec4(vec3(l), 1.0);',
+      '}'].join('\n'),
+    side: T.BackSide, depthWrite: false
+  });
+  const sky = new T.Mesh(new T.SphereGeometry(1000, 32, 16), skyMat);
+  sky.renderOrder = -10; sky.frustumCulled = false;
+  scene.add(sky);
+
+  /* ---------- light ---------- */
+  const hemi = new T.HemisphereLight(0xffffff, 0x3a3a3a, .55);
+  scene.add(hemi);
+  const sun = new T.DirectionalLight(0xffffff, 1.6);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(small ? 1024 : 2048, small ? 1024 : 2048);
+  Object.assign(sun.shadow.camera, { left: -48, right: 48, top: 48, bottom: -48, near: 20, far: 460 });
+  sun.shadow.bias = -.0004; sun.shadow.normalBias = .04;
+  scene.add(sun); scene.add(sun.target);
+
+  /* ---------- temple ---------- */
+  function mergeGeos(list) {
+    const parts = list.map(g => g.index ? g.toNonIndexed() : g);
+    let n = 0; parts.forEach(g => { n += g.attributes.position.count; });
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3); let o = 0;
+    parts.forEach(g => { pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; });
+    const m = new T.BufferGeometry();
+    m.setAttribute('position', new T.BufferAttribute(pos, 3));
+    m.setAttribute('normal', new T.BufferAttribute(nor, 3));
+    return m;
+  }
+  function columnGeometry(R, H) {
+    const shaft = new T.CylinderGeometry(R, R, H, 120, 12, true);
+    const p = shaft.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+      const t = (y + H / 2) / H, ang = Math.atan2(z, x);
+      let f = ang / (Math.PI * 2) * 20; f -= Math.floor(f);
+      const r = R * (1 - .19 * t + .03 * Math.sin(Math.PI * t)) * (1 - .055 * Math.sin(Math.PI * f));
+      p.setXYZ(i, Math.cos(ang) * r, y + H / 2, Math.sin(ang) * r);
+    }
+    shaft.computeVertexNormals();
+    const tr = R * .81;
+    const ech = new T.CylinderGeometry(tr * 1.42, tr, .44, 40, 1, false); ech.translate(0, H + .22, 0);
+    const aba = new T.BoxGeometry(tr * 3.05, .34, tr * 3.05); aba.translate(0, H + .61, 0);
+    return mergeGeos([shaft, ech, aba]);
+  }
+  function buildTemple() {
+    const grp = new T.Group();
+    const mat = new T.MeshStandardMaterial({ color: 0xebebeb, roughness: .86, metalness: 0 });
+    const inner = new T.MeshStandardMaterial({ color: 0xbdbdbd, roughness: .95, metalness: 0 });
+    const a = 3.2, nF = 6, nS = 13, R = .82, H = 8.8, capH = .78;
+    const W = a * (nF - 1), L = a * (nS - 1), stepH = .45, stepOut = .62;
+    const topL = L + 2 * R + 1.6, topW = W + 2 * R + 1.6;
+    const add = (geo, x, y, z, m = mat) => { const ms = new T.Mesh(geo, m); ms.position.set(x, y, z); ms.castShadow = ms.receiveShadow = true; grp.add(ms); return ms; };
+    add(new T.BoxGeometry(topL + 6, 4, topW + 6), 0, -2, 0);
+    for (let i = 0; i < 3; i++) { const e = (2 - i) * stepOut * 2; add(new T.BoxGeometry(topL + e, stepH, topW + e), 0, stepH * (i + .5), 0); }
+    const y0 = stepH * 3;
+    const coords = [];
+    for (let ix = 0; ix < nS; ix++) for (let iz = 0; iz < nF; iz++) if (ix === 0 || ix === nS - 1 || iz === 0 || iz === nF - 1) coords.push([-L / 2 + ix * a, -W / 2 + iz * a]);
+    const cols = new T.InstancedMesh(columnGeometry(R, H), mat, coords.length);
+    const m4 = new T.Matrix4();
+    coords.forEach(([x, z], i) => { m4.makeTranslation(x, y0, z); cols.setMatrixAt(i, m4); });
+    cols.castShadow = cols.receiveShadow = true; grp.add(cols);
+    // cella
+    add(new T.BoxGeometry(L - 2 * a + 1.4, H + capH, W - 2 * a + 1.2), 0, y0 + (H + capH) / 2, 0, inner);
+    // entablature
+    const yTop = y0 + H + capH, archH = 1.3, frzH = 1.3, corH = .55;
+    const eL = L + 2 * R * 1.25, eW = W + 2 * R * 1.25;
+    add(new T.BoxGeometry(eL, archH, eW), 0, yTop + archH / 2, 0);
+    add(new T.BoxGeometry(eL - .1, frzH, eW - .1), 0, yTop + archH + frzH / 2, 0);
+    const tpos = [];
+    for (let j = 0; j <= 2 * (nS - 1); j++) { const x = -L / 2 + j * a / 2; tpos.push([x, eW / 2 - .2], [x, -eW / 2 + .2]); }
+    for (let j = 1; j < 2 * (nF - 1); j++) { const z = -W / 2 + j * a / 2; tpos.push([eL / 2 - .2, z], [-eL / 2 + .2, z]); }
+    const tris = new T.InstancedMesh(new T.BoxGeometry(.52, frzH * .9, .52), mat, tpos.length);
+    tpos.forEach(([x, z], i) => { m4.makeTranslation(x, yTop + archH + frzH / 2, z); tris.setMatrixAt(i, m4); });
+    tris.castShadow = tris.receiveShadow = true; grp.add(tris);
+    const cY = yTop + archH + frzH, cL = eL + 1.3, cW = eW + 1.3;
+    add(new T.BoxGeometry(cL, corH, cW), 0, cY + corH / 2, 0);
+    // roof prism, whose ends are the pediments
+    const pedH = 2.7, shape = new T.Shape();
+    shape.moveTo(-cW / 2, 0); shape.lineTo(cW / 2, 0); shape.lineTo(0, pedH); shape.closePath();
+    const roofGeo = new T.ExtrudeGeometry(shape, { depth: cL - 1, bevelEnabled: false });
+    roofGeo.translate(0, 0, -(cL - 1) / 2); roofGeo.rotateY(Math.PI / 2);
+    add(roofGeo, 0, cY + corH, 0);
+    // raking cornices frame the recessed tympanum
+    const slope = Math.atan2(pedH, cW / 2), sl = Math.hypot(cW / 2, pedH) + .5;
+    [-1, 1].forEach(sx => [-1, 1].forEach(sz => {
+      const b = add(new T.BoxGeometry(1.0, .42, sl), sx * (cL / 2 - .5), cY + corH + pedH / 2 + .16, sz * cW / 4);
+      b.rotation.x = sz < 0 ? -slope : slope;
+    }));
+    [-1, 1].forEach(sx => add(new T.BoxGeometry(.8, 1.0, .8), sx * (cL / 2 - .5), cY + corH + pedH + .4, 0));
+    grp.position.set(0, PY, 0);
+    return grp;
+  }
+  const temple = buildTemple();
+  scene.add(temple);
+  const templeC = new T.Vector3(0, PY + 7, 0);
+
+  /* ---------- sea ---------- */
+  let rt = null, reflRT = null;
+  const waterMat = new T.ShaderMaterial({
+    uniforms: { tRefl: { value: null }, uRes: { value: new T.Vector2(1, 1) }, uTime: { value: 0 }, uDeep: { value: .2 }, uHorL: { value: .8 }, uRefl: { value: 0 }, uRight: { value: new T.Vector2(1, 0) } },
+    vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: [
+      'uniform sampler2D tRefl; uniform vec2 uRes, uRight; uniform float uTime, uDeep, uHorL, uRefl; varying vec3 vW;',
+      'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+      'float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+      '  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }',
+      'void main(){',
+      '  vec3 V = normalize(cameraPosition - vW);',
+      '  float fres = pow(1.0 - clamp(V.y, 0.0, 1.0), 3.0);',
+      '  vec2 q = vec2(dot(vW.xz, uRight), dot(vW.xz, vec2(-uRight.y, uRight.x)));',
+      '  vec2 p = q * vec2(0.07, 0.42);',
+      '  float n = n2(p + vec2(uTime * 0.12, 0.0)) * 0.6 + n2(p * 2.7 - vec2(0.0, uTime * 0.25)) * 0.4;',
+      '  vec2 s = gl_FragCoord.xy / uRes;',
+      '  vec2 ruv = vec2(s.x, 1.0 - s.y) + vec2((n - 0.5) * 0.004, (n - 0.5) * 0.03);',
+      '  float refl = texture2D(tRefl, ruv).r;',
+      '  float plain = mix(uDeep, uHorL, fres);',
+      '  float l = mix(plain, mix(uDeep, refl, 0.62 + 0.33 * fres), uRefl);',
+      '  l += (n - 0.5) * 0.08;',
+      '  gl_FragColor = vec4(vec3(l), 1.0);',
+      '}'].join('\n')
+  });
+  const water = new T.Mesh(new T.PlaneGeometry(5000, 5000), waterMat);
+  water.rotation.x = -Math.PI / 2;
+  scene.add(water);
+
+  /* ---------- figures (flat silhouettes, like the paintings) ---------- */
+  function canvasTex(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d'); g.fillStyle = g.strokeStyle = '#000'; g.lineCap = g.lineJoin = 'round';
+    draw(g);
+    const t = new T.CanvasTexture(c); t.minFilter = T.LinearFilter; t.generateMipmaps = false;
+    return t;
+  }
+  function drawWalker(g, ph) {
+    const cx = 32, s = Math.sin(ph * Math.PI * 2), st = 15 * s, sw = 9 * s;
+    g.lineWidth = 7;
+    g.beginPath(); g.moveTo(cx, 86); g.lineTo(cx + st * .5, 121); g.lineTo(cx + st, 154); g.stroke();
+    g.beginPath(); g.moveTo(cx, 86); g.lineTo(cx - st * .5, 121); g.lineTo(cx - st, 154); g.stroke();
+    g.beginPath(); g.moveTo(cx - 10, 30); g.lineTo(cx + 10, 30); g.lineTo(cx + 13, 100); g.lineTo(cx - 13, 100); g.closePath(); g.fill();
+    g.lineWidth = 6;
+    g.beginPath(); g.moveTo(cx - 5, 34); g.lineTo(cx - 7 - sw * .6, 62); g.lineTo(cx - 7 - sw, 86); g.stroke();
+    g.beginPath(); g.moveTo(cx + 5, 34); g.lineTo(cx + 7 + sw * .6, 62); g.lineTo(cx + 7 + sw, 86); g.stroke();
+    g.fillRect(cx - 3, 20, 6, 12);
+    g.beginPath(); g.arc(cx, 15, 9, 0, Math.PI * 2); g.fill();
+  }
+  function drawDeer(g) {
+    g.beginPath(); g.ellipse(80, 62, 34, 15, -.05, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(102, 54); g.lineTo(116, 26); g.lineTo(127, 28); g.lineTo(116, 64); g.closePath(); g.fill();
+    g.beginPath(); g.ellipse(127, 27, 11, 6, .35, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(118, 18, 6, 3, -.6, 0, Math.PI * 2); g.fill();
+    g.lineWidth = 2.6; g.beginPath();
+    g.moveTo(121, 18); g.lineTo(114, 3); g.moveTo(118, 11); g.lineTo(108, 7); g.moveTo(124, 18); g.lineTo(131, 2); g.moveTo(127, 10); g.lineTo(137, 6);
+    g.stroke();
+    g.lineWidth = 4.5;
+    [[58, 70, 54, 113], [66, 72, 67, 113], [96, 70, 100, 113], [104, 68, 109, 113]].forEach(([x1, y1, x2, y2]) => { g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); });
+    g.beginPath(); g.ellipse(47, 56, 5, 3, .6, 0, Math.PI * 2); g.fill();
+  }
+  const walkFrames = Array.from({ length: 8 }, (_, i) => canvasTex(64, 160, g => drawWalker(g, i / 8)));
+  const deerTex = canvasTex(160, 120, drawDeer);
+  function sprite(map, w, h) {
+    const s = new T.Sprite(new T.SpriteMaterial({ map, alphaTest: .5, depthWrite: true }));
+    s.center.set(.5, 0); s.scale.set(w, h, 1); scene.add(s); return s;
+  }
+  const walker = sprite(walkFrames[0], .72, 1.8);
+  const deer0 = sprite(deerTex, 1.9, 1.42);
+  const wader = sprite(walkFrames[2], .72, 1.8);
+  const deer3 = sprite(deerTex, 1.9, 1.42);
+
+  /* ---------- the scenes (one per window) ---------- */
+  const UP = new T.Vector3(0, 1, 0);
+  const SC = [
+    { name: 'flock', pos: [-104, 4.0, 72, 1], tgt: [-14, PY + 3.5, -18], fov: 30,
+      sun: [.42, .5, .76], sunI: 1.75, hemiI: .6, zen: .7, hor: .93, glow: .08,
+      fogL: .9, fogA: .0035, fogB: .05, fogBase: 0, expo: 1.0, con: 1.05, gam: 1.0, grain: .26, stip: .14, vig: .28,
+      dLum: .04, dSize: .2, dMin: 1.5, dMax: 4.5, shadeMix: 0, refl: 0, deep: .55, mob: { fov: 16, r: 15, y: -5, back: 8 } },
+    { name: 'sphere', pos: [-78, 2.2, 52, 1], tgt: [-8, PY + 9, -14], fov: 40,
+      sun: [-.62, .42, .66], sunI: 1.5, hemiI: .45, zen: .16, hor: .62, glow: .05,
+      fogL: .93, fogA: .05, fogB: .3, fogBase: PY, expo: 1.0, con: 1.08, gam: 1.0, grain: .24, stip: .16, vig: .32,
+      dLum: .9, dSize: .34, dMin: 1.6, dMax: 6, shadeMix: 1, refl: 0, deep: .5, mob: { fov: 16, r: 13, y: -10, back: 8 } },
+    { name: 'lattice', pos: [-150, 70, 118, 0], tgt: [-34, 4, 12], fov: 34,
+      sun: [.15, .22, -.96], sunI: .65, hemiI: .22, zen: .03, hor: .3, glow: .12,
+      fogL: .26, fogA: .006, fogB: .045, fogBase: 0, expo: 1.0, con: 1.12, gam: 1.05, grain: .2, stip: .12, vig: .38,
+      dLum: .74, dSize: .5, dMin: 1.8, dMax: 6, shadeMix: 0, refl: 0, deep: .12, mob: { fov: 16, r: 0, y: 0, back: 8 } },
+    { name: 'cloud', pos: [46, 1.7, 68, 0], tgt: [13.4, 11, -17.9], fov: 40,
+      sun: [-.72, .48, .5], sunI: 1.5, hemiI: .45, zen: .05, hor: .6, glow: .04,
+      fogL: .6, fogA: .004, fogB: .06, fogBase: 0, expo: 1.0, con: 1.05, gam: 1.0, grain: .14, stip: .07, vig: .3,
+      dLum: .96, dSize: 3.4, dMin: 2, dMax: 26, shadeMix: 1, refl: 1, deep: .16, mob: { fov: 16, r: -18, y: -13, back: 8 } }
+  ];
+  SC.forEach(s => {
+    s.P = new T.Vector3(s.pos[0], s.pos[3] ? terrainH(s.pos[0], s.pos[2]) + s.pos[1] : s.pos[1], s.pos[2]);
+    s.T = new T.Vector3(...s.tgt);
+    s.S = new T.Vector3(...s.sun).normalize();
+    const f = new T.Vector3().subVectors(s.T, s.P); f.y = 0; f.normalize();
+    s.F = f; s.R = new T.Vector3(-f.z, 0, f.x);
+  });
+
+  // place the figures where each painting would put them
+  const onGround = (v, lift = 0) => { v.y = terrainH(v.x, v.z) + lift; return v; };
+  const s0 = SC[0], s3 = SC[3];
+  const walkStart = onGround(s0.P.clone().addScaledVector(s0.F, 75).addScaledVector(s0.R, 24));
+  walker.position.copy(walkStart);
+  deer0.position.copy(onGround(s0.P.clone().addScaledVector(s0.F, 62).addScaledVector(s0.R, -2.5)));
+  wader.position.copy(s3.P.clone().addScaledVector(s3.F, 40).addScaledVector(s3.R, 3)); wader.position.y = -.85;
+  const d3 = s3.P.clone().addScaledVector(s3.F, 60).addScaledVector(s3.R, -20);
+  for (let i = 0; i < 60 && terrainH(d3.x, d3.z) < .5; i++) d3.addScaledVector(s3.F, .8);
+  deer3.position.copy(onGround(d3));
+
+  /* ---------- the swarm ---------- */
+  const N = small ? 1200 : 2400;
+  const P = new Float32Array(N * 3), V = new Float32Array(N * 3), TG = new Float32Array(N * 3);
+  const seedA = new Float32Array(N), shade = new Float32Array(N).fill(1), glow = new Float32Array(N), aliveA = new Float32Array(N).fill(1);
+  const alive = new Uint8Array(N).fill(1), dying = new Float32Array(N);
+  const rnd = mulberry(7);
+  const FLOCK = { c: templeC.clone().addScaledVector(SC[0].F, 25).addScaledVector(SC[0].R, 1), r: new T.Vector3(22, 8, 22) };
+  FLOCK.c.y = PY + 24;
+  for (let i = 0; i < N; i++) {
+    const u = rnd() * 2 - 1, th = rnd() * 6.283, rr = Math.cbrt(rnd());
+    const q = Math.sqrt(1 - u * u) * rr;
+    P[i * 3] = FLOCK.c.x + Math.cos(th) * q * FLOCK.r.x;
+    P[i * 3 + 1] = FLOCK.c.y + u * rr * FLOCK.r.y;
+    P[i * 3 + 2] = FLOCK.c.z + Math.sin(th) * q * FLOCK.r.z;
+    V[i * 3] = 10; V[i * 3 + 2] = -3;
+    seedA[i] = rnd();
+  }
+  const geo = new T.BufferGeometry();
+  const posAttr = new T.BufferAttribute(P, 3).setUsage(T.DynamicDrawUsage);
+  const shadeAttr = new T.BufferAttribute(shade, 1).setUsage(T.DynamicDrawUsage);
+  const glowAttr = new T.BufferAttribute(glow, 1).setUsage(T.DynamicDrawUsage);
+  const aliveAttr = new T.BufferAttribute(aliveA, 1).setUsage(T.DynamicDrawUsage);
+  geo.setAttribute('position', posAttr);
+  geo.setAttribute('aSeed', new T.BufferAttribute(seedA, 1));
+  geo.setAttribute('aShade', shadeAttr);
+  geo.setAttribute('aGlow', glowAttr);
+  geo.setAttribute('aAlive', aliveAttr);
+  const ptsMat = new T.ShaderMaterial({
+    uniforms: { uSize: { value: .2 }, uScale: { value: 800 }, uMin: { value: 1.5 }, uMax: { value: 5 }, uLum: { value: .05 }, uShadeMix: { value: 0 }, uTime: { value: 0 } },
+    vertexShader: [
+      'attribute float aSeed; attribute float aShade; attribute float aGlow; attribute float aAlive;',
+      'uniform float uSize, uScale, uMin, uMax, uLum, uShadeMix, uTime;',
+      'varying float vL; varying float vA;',
+      'void main(){',
+      '  vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+      '  gl_Position = projectionMatrix * mv;',
+      '  gl_PointSize = clamp(uSize * uScale / max(-mv.z, 0.1), uMin, uMax) * (1.0 + aGlow * 0.5);',
+      '  float blink = step(0.993, fract(aSeed * 13.7 + uTime * 0.23));',
+      '  vL = clamp(mix(uLum * mix(1.0, aShade, uShadeMix), 1.0, max(aGlow * 0.9, blink * 0.85)), 0.0, 1.0);',
+      '  vA = aAlive;',
+      '}'].join('\n'),
+    fragmentShader: [
+      'varying float vL; varying float vA;',
+      'void main(){ if (vA < 0.5) discard; vec2 c = gl_PointCoord - 0.5; float d = dot(c, c); if (d > 0.25) discard; gl_FragColor = vec4(vec3(vL * (1.0 - d * 0.35)), 1.0); }'].join('\n')
+  });
+  const swarm = new T.Points(geo, ptsMat);
+  swarm.frustumCulled = false;
+  scene.add(swarm);
+
+  // formations ---------------------------------------------------
+  const SPH = { c: templeC.clone().addScaledVector(SC[1].F, 35).addScaledVector(SC[1].R, 6), R: 12 };
+  SPH.c.y = PY + 39;
+  const sphL = new T.Vector3().copy(SC[1].R).multiplyScalar(-.75).addScaledVector(UP, .45).addScaledVector(SC[1].F, -.5).normalize();
+  const LAT = { c: new T.Vector3(-46, 0, 18), sp: 2.5, lift: 7 };
+  const CLOUD = { c: SC[3].P.clone().addScaledVector(SC[3].F, 240).addScaledVector(SC[3].R, 20), base: 10, k: 1.1 };
+  CLOUD.c.y = 0;
+
+  function genRings(M, R) {
+    const rings = Math.max(8, Math.round(Math.sqrt(M / 2.4)));
+    const ws = []; let tot = 0;
+    for (let k = 0; k < rings; k++) { const w = Math.sin(Math.PI * (k + .5) / rings); ws.push(w); tot += w; }
+    const out = new Float32Array(M * 3); let idx = 0;
+    for (let k = 0; k < rings && idx < M; k++) {
+      const phi = Math.PI * (k + .5) / rings;
+      const cnt = k === rings - 1 ? M - idx : Math.round(M * ws[k] / tot);
+      for (let j = 0; j < cnt && idx < M; j++) {
+        const th = j / cnt * Math.PI * 2 + k * .37;
+        out[idx * 3] = Math.cos(th) * Math.sin(phi) * R; out[idx * 3 + 1] = Math.cos(phi) * R; out[idx * 3 + 2] = Math.sin(th) * Math.sin(phi) * R; idx++;
+      }
+    }
+    for (; idx < M; idx++) { out[idx * 3 + 1] = -R; }
+    return out;
+  }
+  function genLattice(M) {
+    const cols = Math.round(Math.sqrt(M * 1.7)), rows = Math.ceil(M / cols);
+    const out = new Float32Array(M * 3), col = new Float32Array(M);
+    const R2 = SC[2].R, F2 = SC[2].F;
+    for (let i = 0; i < M; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      const u = (c - (cols - 1) / 2) * LAT.sp, v = (r - (rows - 1) / 2) * LAT.sp;
+      const x = LAT.c.x + R2.x * u + F2.x * v, z = LAT.c.z + R2.z * u + F2.z * v;
+      const overTemple = Math.abs(x) < 26 && Math.abs(z) < 14;
+      out[i * 3] = x; out[i * 3 + 1] = overTemple ? PY + 21 : Math.max(terrainH(x, z), 0) + LAT.lift; out[i * 3 + 2] = z;
+      col[i] = c;
+    }
+    return { pos: out, col, cols };
+  }
+  function genCloud(M) {
+    const r = mulberry(11), blobs = [];
+    for (let i = -4; i <= 4; i++) blobs.push([i * 13 + (r() - .5) * 5, 7 + r() * 3, (r() - .5) * 14, 11 + r() * 5]);
+    [[-6, 22, 0, 16], [2, 37, -2, 14], [-3, 51, 3, 12], [5, 63, 0, 10], [0, 74, 2, 8], [-24, 20, 6, 12], [-30, 32, 2, 10], [-34, 42, 0, 7],
+     [22, 22, -4, 13], [30, 34, 0, 10], [36, 44, 3, 8], [14, 46, 8, 9], [-14, 40, -6, 10], [46, 18, 4, 10], [-46, 16, 0, 10]]
+      .forEach(b => blobs.push(b));
+    const area = blobs.map(b => b[3] * b[3]); const tot = area.reduce((s, x) => s + x, 0);
+    const out = new Float32Array(M * 3), sh = new Float32Array(M);
+    const R3 = SC[3].R, F3 = SC[3].F;
+    const L = new T.Vector3().copy(R3).multiplyScalar(-.7).addScaledVector(UP, .55).addScaledVector(F3, -.45).normalize();
+    let i = 0, guard = 0;
+    while (i < M && guard < M * 60) {
+      guard++;
+      let pick = r() * tot, bi = 0; while (pick > area[bi]) { pick -= area[bi]; bi++; }
+      const b = blobs[bi], u = r() * 2 - 1, th = r() * 6.283, q = Math.sqrt(1 - u * u);
+      const nx = Math.cos(th) * q, ny = u, nz = Math.sin(th) * q;
+      const x = (b[0] + nx * b[3]) * CLOUD.k, y = (b[1] + ny * b[3]) * CLOUD.k, z = (b[2] + nz * b[3]) * CLOUD.k;
+      if (y < 2) continue;
+      let inside = false;
+      for (let k = 0; k < blobs.length; k++) { if (k === bi) continue; const o = blobs[k], ck = CLOUD.k; if ((x - o[0] * ck) ** 2 + (y - o[1] * ck) ** 2 + (z - o[2] * ck) ** 2 < o[3] * o[3] * ck * ck * .94) { inside = true; break; } }
+      if (inside) continue;
+      const wx = CLOUD.c.x + R3.x * x + F3.x * z, wz = CLOUD.c.z + R3.z * x + F3.z * z;
+      out[i * 3] = wx; out[i * 3 + 1] = CLOUD.base + y; out[i * 3 + 2] = wz;
+      const wn = new T.Vector3(R3.x * nx + F3.x * nz, ny, R3.z * nx + F3.z * nz);
+      sh[i] = clamp(.42 + .62 * Math.max(wn.dot(L), 0) + .1 * (y / 96) - (y < 12 ? .18 : 0), .2, 1.05);
+      i++;
+    }
+    for (; i < M; i++) { out[i * 3] = CLOUD.c.x; out[i * 3 + 1] = CLOUD.base + 30; out[i * 3 + 2] = CLOUD.c.z; sh[i] = .8; }
+    return { pos: out, shade: sh };
+  }
+
+  let form = 0, slotBase = null, slotCol = null, latCols = 1;
+  const slotOf = new Int32Array(N).fill(-1);
+  function liveIds() { const ids = []; for (let i = 0; i < N; i++) if (alive[i] && dying[i] <= 0) ids.push(i); return ids; }
+  function setFormation(f) {
+    form = f;
+    if (f === 0) { shade.fill(1); shadeAttr.needsUpdate = true; slotOf.fill(-1); return; }
+    const ids = liveIds(), M = ids.length;
+    let base, sh = null;
+    if (f === 1) base = genRings(M, SPH.R);
+    else if (f === 2) { const o = genLattice(M); base = o.pos; slotCol = o.col; latCols = o.cols; }
+    else {
+      const tt = target(3), dir = new T.Vector3().subVectors(tt.T, tt.P); dir.y = 0; dir.normalize();
+      CLOUD.c.copy(tt.P).addScaledVector(dir, 240).addScaledVector(SC[3].R, portrait() ? 2 : 20); CLOUD.c.y = 0;
+      const o = genCloud(M); base = o.pos; sh = o.shade;
+    }
+    slotBase = base;
+    const ax = SC[f].R, off = f === 1 ? SPH.c : null;
+    const key = (x, z) => x * ax.x + z * ax.z;
+    ids.sort((a, b) => key(P[a * 3], P[a * 3 + 2]) - key(P[b * 3], P[b * 3 + 2]));
+    const slots = Array.from({ length: M }, (_, k) => k);
+    const sx = k => base[k * 3] + (off ? off.x : 0), sz = k => base[k * 3 + 2] + (off ? off.z : 0);
+    slots.sort((a, b) => key(sx(a), sz(a)) - key(sx(b), sz(b)));
+    slotOf.fill(-1);
+    ids.forEach((id, k) => { slotOf[id] = slots[k]; });
+    if (sh) ids.forEach(id => { shade[id] = sh[slotOf[id]]; });
+    else shade.fill(1);
+    shadeAttr.needsUpdate = true;
+  }
+
+  // boids with topological neighbours (k = 7) on a hashed grid
+  const TABLE = 16384, CS = 4;
+  const cellStart = new Int32Array(TABLE + 1), cursor = new Int32Array(TABLE), items = new Int32Array(N), cellOf = new Int32Array(N);
+  const hcell = (ix, iy, iz) => ((Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663) ^ Math.imul(iz, 83492791)) >>> 0) & (TABLE - 1);
+  function buildGrid() {
+    cellStart.fill(0);
+    for (let i = 0; i < N; i++) {
+      if (!alive[i]) { cellOf[i] = -1; continue; }
+      const h = hcell(Math.floor(P[i * 3] / CS), Math.floor(P[i * 3 + 1] / CS), Math.floor(P[i * 3 + 2] / CS));
+      cellOf[i] = h; cellStart[h + 1]++;
+    }
+    for (let h = 0; h < TABLE; h++) cellStart[h + 1] += cellStart[h];
+    cursor.set(cellStart.subarray(0, TABLE));
+    for (let i = 0; i < N; i++) if (cellOf[i] >= 0) items[cursor[cellOf[i]]++] = i;
+  }
+  const K = 7, kd = new Float32Array(K), kj = new Int32Array(K);
+  let order = 0;
+  const rot = { a: 0 };
+
+  function updateSwarm(dt, t, wForm) {
+    const doFlock = wForm < .999;
+    if (doFlock) buildGrid();
+    const cx = FLOCK.c.x + Math.sin(t * .11) * 10, cy = FLOCK.c.y + Math.sin(t * .07) * 3, cz = FLOCK.c.z + Math.cos(t * .09) * 8;
+    const px = cx + FLOCK.r.x * .85 * Math.sin(t * .23), py = cy + FLOCK.r.y * .5 * Math.sin(t * .41 + 1), pz = cz + FLOCK.r.z * .8 * Math.cos(t * .17);
+    rot.a += dt * .12;
+    const ca = Math.cos(rot.a), sa = Math.sin(rot.a);
+    let ox = 0, oy = 0, oz = 0, live = 0;
+    const wavePos = ((t * 9) % (latCols + 30)) - 15;
+    for (let i = 0; i < N; i++) {
+      const i3 = i * 3;
+      if (!alive[i]) continue;
+      let x = P[i3], y = P[i3 + 1], z = P[i3 + 2], vx = V[i3], vy = V[i3 + 1], vz = V[i3 + 2];
+      if (dying[i] > 0) {                           // knocked out: tumble and fall
+        dying[i] -= dt; vy -= 22 * dt; vx *= .99; vz *= .99;
+        P[i3] = x + vx * dt; P[i3 + 1] = y + vy * dt; P[i3 + 2] = z + vz * dt;
+        if (dying[i] <= 0 || P[i3 + 1] < terrainH(P[i3], P[i3 + 2])) { alive[i] = 0; aliveA[i] = 0; dying[i] = 0; aliveAttr.needsUpdate = true; }
+        continue;
+      }
+      let ax = 0, ay = 0, az = 0;
+      if (doFlock) {
+        let cnt = 0;
+        const gx = Math.floor(x / CS), gy = Math.floor(y / CS), gz = Math.floor(z / CS);
+        for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) {
+          const h = hcell(gx + a, gy + b, gz + c);
+          for (let p = cellStart[h], e = cellStart[h + 1]; p < e; p++) {
+            const j = items[p]; if (j === i || dying[j] > 0) continue;
+            const dx = P[j * 3] - x, dy = P[j * 3 + 1] - y, dz = P[j * 3 + 2] - z, d2 = dx * dx + dy * dy + dz * dz;
+            if (cnt < K) { let q = cnt++; while (q > 0 && kd[q - 1] > d2) { kd[q] = kd[q - 1]; kj[q] = kj[q - 1]; q--; } kd[q] = d2; kj[q] = j; }
+            else if (d2 < kd[K - 1]) { let q = K - 1; while (q > 0 && kd[q - 1] > d2) { kd[q] = kd[q - 1]; kj[q] = kj[q - 1]; q--; } kd[q] = d2; kj[q] = j; }
+          }
+        }
+        let sx = 0, sy = 0, sz = 0, avx = 0, avy = 0, avz = 0, mx = 0, my = 0, mz = 0;
+        for (let q = 0; q < cnt; q++) {
+          const j = kj[q], j3 = j * 3, d2 = kd[q] + .01;
+          if (d2 < 3.2) { sx += (x - P[j3]) / d2; sy += (y - P[j3 + 1]) / d2; sz += (z - P[j3 + 2]) / d2; }
+          avx += V[j3]; avy += V[j3 + 1]; avz += V[j3 + 2]; mx += P[j3]; my += P[j3 + 1]; mz += P[j3 + 2];
+        }
+        if (cnt) {
+          const inv = 1 / cnt;
+          ax += sx * 9 + (avx * inv - vx) * 1.1 + (mx * inv - x) * .55;
+          ay += sy * 9 + (avy * inv - vy) * 1.1 + (my * inv - y) * .55;
+          az += sz * 9 + (avz * inv - vz) * 1.1 + (mz * inv - z) * .55;
+        }
+        const qx = (x - cx) / FLOCK.r.x, qy = (y - cy) / FLOCK.r.y, qz = (z - cz) / FLOCK.r.z, qd = Math.sqrt(qx * qx + qy * qy + qz * qz);
+        if (qd > 1) { const dx0 = x - cx, dy0 = y - cy, dz0 = z - cz, dl = Math.sqrt(dx0 * dx0 + dy0 * dy0 + dz0 * dz0) + 1e-3, k = Math.min((qd - 1) * 36, 70) / dl; ax -= dx0 * k; ay -= dy0 * k * 1.6; az -= dz0 * k; }
+        const ex = x - px, ey = y - py, ez = z - pz, ed = Math.sqrt(ex * ex + ey * ey + ez * ez);
+        if (ed < 15) { const k = (15 - ed) * 3.2 / (ed + .1); ax += ex * k; ay += ey * k * .6; az += ez * k; }
+        ax *= (1 - wForm); ay *= (1 - wForm); az *= (1 - wForm);
+      }
+      if (wForm > .001 && slotOf[i] >= 0) {
+        const s3 = slotOf[i] * 3;
+        let tx = slotBase[s3], ty = slotBase[s3 + 1], tz = slotBase[s3 + 2];
+        if (form === 1) {
+          const rx = tx * ca - tz * sa, rz = tx * sa + tz * ca;
+          const nx = rx / SPH.R, ny = ty / SPH.R, nz = rz / SPH.R;
+          shade[i] = .3 + .78 * Math.max(nx * sphL.x + ny * sphL.y + nz * sphL.z, 0);
+          tx = SPH.c.x + rx; ty = SPH.c.y + ty; tz = SPH.c.z + rz;
+        } else if (form === 2) {
+          ty += Math.sin(t * 1.3 + slotCol[slotOf[i]] * .35) * .35;
+          const g = Math.exp(-((slotCol[slotOf[i]] - wavePos) ** 2) / 6);
+          glow[i] = g > .02 ? g : 0;
+        } else if (form === 3) {
+          tx += Math.sin(t * .2 + seedA[i] * 9) * .6; ty += Math.sin(t * .17 + seedA[i] * 7) * .5;
+        }
+        TG[i * 3] = tx; TG[i * 3 + 1] = ty; TG[i * 3 + 2] = tz;
+        const dx = tx - x, dy = ty - y, dz = tz - z, d = Math.sqrt(dx * dx + dy * dy + dz * dz) + 1e-4;
+        const sp = Math.min(30, d * 1.6);
+        ax += ((dx / d) * sp - vx) * 3 * wForm; ay += ((dy / d) * sp - vy) * 3 * wForm; az += ((dz / d) * sp - vz) * 3 * wForm;
+      }
+      vx += ax * dt; vy += ay * dt; vz += az * dt;
+      let s = Math.sqrt(vx * vx + vy * vy + vz * vz);
+      const maxS = lerp(16, 34, wForm), minS = lerp(8, 0, wForm);
+      if (s > maxS) { const k = maxS / s; vx *= k; vy *= k; vz *= k; s = maxS; }
+      else if (s < minS && s > 1e-4) { const k = minS / s; vx *= k; vy *= k; vz *= k; s = minS; }
+      const gnd = terrainH(x, z) + 2.5;
+      if (y < gnd && wForm < .5) vy += (gnd - y) * 4 * dt;
+      x += vx * dt; y += vy * dt; z += vz * dt;
+      P[i3] = x; P[i3 + 1] = y; P[i3 + 2] = z; V[i3] = vx; V[i3 + 1] = vy; V[i3 + 2] = vz;
+      if (s > .01) { ox += vx / s; oy += vy / s; oz += vz / s; }
+      live++;
+    }
+    if (form !== 2) { for (let i = 0; i < N; i++) if (glow[i] > 0) glow[i] = Math.max(0, glow[i] - dt * 2); }
+    order = live ? Math.sqrt(ox * ox + oy * oy + oz * oz) / live : 0;
+    posAttr.needsUpdate = true; glowAttr.needsUpdate = true;
+    if (form === 1) shadeAttr.needsUpdate = true;
+    return live;
+  }
+
+  function knockOut() {
+    const ids = liveIds(); const r = mulberry((performance.now() | 0) + 3);
+    const n = Math.floor(ids.length * .25);
+    for (let k = 0; k < n; k++) { const j = k + Math.floor(r() * (ids.length - k)); [ids[k], ids[j]] = [ids[j], ids[k]]; const i = ids[k]; dying[i] = 2.4; V[i * 3 + 1] = 2; }
+    setFormation(form);
+  }
+  function restore() {
+    for (let i = 0; i < N; i++) if (!alive[i] || dying[i] > 0) {
+      alive[i] = 1; aliveA[i] = 1; dying[i] = 0;
+      P[i * 3] = templeC.x + (rnd() - .5) * 30; P[i * 3 + 1] = PY + 1; P[i * 3 + 2] = templeC.z + (rnd() - .5) * 14;
+      V[i * 3] = 0; V[i * 3 + 1] = 12; V[i * 3 + 2] = 0;
+    }
+    aliveAttr.needsUpdate = true; setFormation(form);
+  }
+
+  /* ---------- post: fog, tone, ultramarine stipple ---------- */
+  function makeRamp() {
+    const stops = [[0, [5, 0, 61]], [.14, [23, 23, 130]], [.26, [56, 56, 149]], [.38, [88, 88, 170]], [.5, [120, 120, 186]], [.62, [152, 152, 204]], [.74, [184, 184, 224]], [.86, [215, 215, 243]], [1, [246, 247, 253]]];
+    const data = new Uint8Array(256 * 4);
+    for (let i = 0; i < 256; i++) {
+      const t = i / 255; let k = 0; while (k < stops.length - 2 && t > stops[k + 1][0]) k++;
+      const [t0, c0] = stops[k], [t1, c1] = stops[k + 1], f = clamp((t - t0) / (t1 - t0), 0, 1);
+      for (let c = 0; c < 3; c++) data[i * 4 + c] = Math.round(lerp(c0[c], c1[c], f));
+      data[i * 4 + 3] = 255;
+    }
+    const tex = new T.DataTexture(data, 256, 1, T.RGBAFormat);
+    tex.magFilter = tex.minFilter = T.LinearFilter; tex.needsUpdate = true;
+    return tex;
+  }
+  const post = new T.ShaderMaterial({
+    uniforms: {
+      tColor: { value: null }, tDepth: { value: null }, tRamp: { value: makeRamp() },
+      uProjInv: { value: new T.Matrix4() }, uCamWorld: { value: new T.Matrix4() }, uCamPos: { value: new T.Vector3() },
+      uTime: { value: 0 }, uPx: { value: 1 }, uGrain: { value: .24 }, uStip: { value: .14 },
+      uFogA: { value: .004 }, uFogB: { value: .05 }, uFogL: { value: .9 }, uFogBase: { value: 0 },
+      uExpo: { value: 1 }, uCon: { value: 1 }, uGam: { value: 1 }, uVig: { value: .25 }
+    },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: [
+      'uniform sampler2D tColor, tDepth, tRamp; uniform mat4 uProjInv, uCamWorld; uniform vec3 uCamPos;',
+      'uniform float uTime, uPx, uGrain, uStip, uFogA, uFogB, uFogL, uFogBase, uExpo, uCon, uGam, uVig;',
+      'varying vec2 vUv;',
+      'float hash(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }',
+      'void main(){',
+      '  float depth = texture2D(tDepth, vUv).x;',
+      '  vec4 vp = uProjInv * vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0); vp /= vp.w;',
+      '  vec3 wp = (uCamWorld * vec4(vp.xyz, 1.0)).xyz;',
+      '  vec3 rd = wp - uCamPos; float dist = length(rd); rd /= max(dist, 1e-4);',
+      '  float ry = abs(rd.y) < 1e-4 ? 1e-4 : rd.y;',
+      '  float od = (uFogA / uFogB) * exp(-(uCamPos.y - uFogBase) * uFogB) * (1.0 - exp(-dist * ry * uFogB)) / ry;',
+      '  float l = texture2D(tColor, vUv).r;',
+      '  l = mix(l, uFogL, clamp(1.0 - exp(-max(od, 0.0)), 0.0, 1.0));',
+      '  l = pow(clamp(l * uExpo, 0.0, 1.0), uGam);',
+      '  l = (l - 0.5) * uCon + 0.5;',
+      '  vec2 q = vUv - 0.5; l *= 1.0 - uVig * dot(q, q) * 1.5;',
+      '  vec2 cell = floor(gl_FragCoord.xy / uPx);',
+      '  float fr = floor(uTime * 12.0);',
+      '  float n1 = hash(cell + fr * vec2(13.17, 7.73));',
+      '  float n2 = hash(cell * 1.31 + fr * vec2(3.31, 17.9) + 19.19);',
+      '  float g = l + (n1 - 0.5) * uGrain;',
+      '  float s = step(n2, l);',
+      '  float v = clamp(mix(g, s, uStip), 0.0, 1.0);',
+      '  gl_FragColor = vec4(texture2D(tRamp, vec2(v * (254.0 / 256.0) + 1.0 / 512.0, 0.5)).rgb, 1.0);',
+      '}'].join('\n'),
+    depthTest: false, depthWrite: false
+  });
+  const postScene = new T.Scene(), postCam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const quad = new T.Mesh(new T.PlaneGeometry(2, 2), post); quad.frustumCulled = false; postScene.add(quad);
+
+  /* ---------- sizing ---------- */
+  let W = 0, H = 0, RW = 1, RH = 1;
+  function makeRT(w, h) {
+    const t = new T.WebGLRenderTarget(w, h, { minFilter: T.LinearFilter, magFilter: T.LinearFilter, format: T.RGBAFormat, depthBuffer: true, stencilBuffer: false });
+    return t;
+  }
+  function resize(force) {
+    const w = innerWidth, h = innerHeight;
+    if (!force && w === W && Math.abs(h - H) < 120) return;
+    W = w; H = h; RW = Math.round(w * PR); RH = Math.round(h * PR);
+    renderer.setSize(RW, RH, false);
+    if (rt) { rt.depthTexture.dispose(); rt.dispose(); }
+    if (reflRT) reflRT.dispose();
+    rt = makeRT(RW, RH);
+    rt.depthTexture = new T.DepthTexture(RW, RH); rt.depthTexture.type = T.UnsignedIntType;
+    reflRT = makeRT(Math.round(RW / 2), Math.round(RH / 2));
+    post.uniforms.tColor.value = rt.texture; post.uniforms.tDepth.value = rt.depthTexture;
+    post.uniforms.uPx.value = PR;
+    waterMat.uniforms.tRefl.value = reflRT.texture; waterMat.uniforms.uRes.value.set(RW, RH);
+    camera.aspect = mirror.aspect = w / h;
+    applied.fov = -1;
+    if (cur) { to = target(active); cur = snap(to); from = cur; t0 = -1e9; shadowDirty = true; }
+  }
+
+  /* ---------- scene state and transitions ---------- */
+  const NUM = ['fov', 'sunI', 'hemiI', 'zen', 'hor', 'glow', 'fogL', 'fogA', 'fogB', 'fogBase', 'expo', 'con', 'gam', 'grain', 'stip', 'vig', 'dLum', 'dSize', 'dMin', 'dMax', 'shadeMix', 'refl', 'deep'];
+  function snap(s) { const o = { P: s.P.clone(), T: s.T.clone(), S: s.S.clone() }; NUM.forEach(k => { o[k] = s[k]; }); return o; }
+  const portrait = () => W / H < .9;
+  function target(i) {
+    const s = snap(SC[i]);
+    if (portrait()) { const m = SC[i].mob; s.fov += m.fov; s.T.addScaledVector(SC[i].R, m.r); s.T.y += m.y; s.P.addScaledVector(SC[i].F, -m.back); }
+    return s;
+  }
+  let active = 0, cur = null, from = null, to = null, t0 = 0, dur = 2400, wForm = 0, formFrom = 0;
+  const applied = { fov: -1 };
+  function setScene(i, instant) {
+    if (cur && i === active && !instant) return;
+    active = i;
+    to = target(i);
+    from = cur ? snap(cur) : to;
+    if (!cur || instant || reduced) { cur = snap(to); from = cur; t0 = -1e9; } else t0 = performance.now();
+    shadowDirty = true;
+    setFormation(i);
+    wForm = i === 0 ? wForm : 0;
+    formFrom = performance.now();
+    walker.visible = i === 0; deer0.visible = i === 0 && !portrait();
+    wader.visible = deer3.visible = i === 3;
+    $$('[data-t="mode"]').forEach(el => { el.textContent = SC[i].name; });
+  }
+  let shadowDirty = true;
+  function tween(now) {
+    const k = ease(clamp((now - t0) / dur, 0, 1));
+    NUM.forEach(key => { cur[key] = lerp(from[key], to[key], k); });
+    cur.P.lerpVectors(from.P, to.P, k);
+    if (k > 0 && k < 1) cur.P.y += Math.sin(Math.PI * k) * 18;
+    cur.T.lerpVectors(from.T, to.T, k);
+    cur.S.lerpVectors(from.S, to.S, k).normalize();
+    if (k < 1) shadowDirty = true;
+  }
+
+  /* ---------- input: pointer parallax and scroll ---------- */
+  const mouse = { x: 0, y: 0, sx: 0, sy: 0 };
+  addEventListener('pointermove', e => { if (e.pointerType === 'mouse') { mouse.x = e.clientX / innerWidth * 2 - 1; mouse.y = e.clientY / innerHeight * 2 - 1; } }, { passive: true });
+
+  const wins = $$('[data-scene]');
+  const near = new Set(), seen = new Set();
+  function pick() {
+    let best = null, bd = 1e9;
+    near.forEach(w => { const r = w.getBoundingClientRect(); const d = Math.abs((r.top + r.bottom) / 2 - innerHeight / 2); if (d < bd) { bd = d; best = w; } });
+    if (best) setScene(+best.dataset.scene);
+  }
+  const ioNear = new IntersectionObserver(es => { es.forEach(e => { e.isIntersecting ? near.add(e.target) : near.delete(e.target); }); pick(); wake(); }, { rootMargin: '60% 0px 60% 0px' });
+  const ioSeen = new IntersectionObserver(es => { es.forEach(e => { e.isIntersecting ? seen.add(e.target) : seen.delete(e.target); }); wake(); }, { threshold: 0 });
+  wins.forEach(w => { ioNear.observe(w); ioSeen.observe(w); });
+  addEventListener('scroll', () => { if (near.size > 1) pick(); }, { passive: true });
+  addEventListener('resize', () => resize(false));
+
+  /* ---------- frame ---------- */
+  const tmp = new T.Vector3(), tgt = new T.Vector3(), clip = new T.Plane(new T.Vector3(0, 1, 0), 0);
+  let raf = 0, last = performance.now(), simT = 0, paused = false, teleT = 0, walkT = 0, frameI = 0;
+  const teleEls = $$('[data-t]');
+  function frame(now) {
+    raf = 0;
+    if (paused || !near.size) return;
+    raf = requestAnimationFrame(frame);
+    let dt = Math.min((now - last) / 1000, 1 / 20); last = now;
+    if (reduced) dt *= .35;
+    simT += dt;
+    tween(now);
+    const fk = clamp((now - formFrom) / 1800, 0, 1);
+    wForm = active === 0 ? Math.max(0, wForm - dt * .8) : Math.max(wForm, fk);
+    const live = updateSwarm(dt, simT, wForm);
+
+    // the walker crosses the dunes in the hero
+    if (active === 0) {
+      walkT += dt;
+      const d = (walkT * .9) % 16;
+      walker.position.copy(walkStart).addScaledVector(SC[0].R, -d);
+      onGround(walker.position);
+      walker.material.map = walkFrames[Math.floor(walkT * 7) % 8];
+    }
+
+    if (!seen.size) return;
+    render(now);
+
+    if (now - teleT > 300) {
+      teleT = now;
+      teleEls.forEach(el => {
+        const k = el.dataset.t;
+        if (k === 'order') el.textContent = order.toFixed(2);
+        else if (k === 'alive') el.textContent = fmt(live);
+        else if (k === 'n') el.textContent = fmt(N);
+      });
+    }
+  }
+  function render(now) {
+    // camera with scroll drift and pointer parallax
+    const el = wins[active], r = el.getBoundingClientRect();
+    const prog = clamp((innerHeight - r.top) / (innerHeight + r.height), 0, 1) - .5;
+    if (!reduced) { mouse.sx += (mouse.x - mouse.sx) * .04; mouse.sy += (mouse.y - mouse.sy) * .04; }
+    const Rv = SC[active].R;
+    tmp.copy(cur.P).addScaledVector(UP, -prog * 3.5);
+    tgt.copy(cur.T).addScaledVector(Rv, mouse.sx * 1.6).addScaledVector(UP, -mouse.sy * .9 - prog * 2.5);
+    camera.position.copy(tmp); camera.up.copy(UP); camera.lookAt(tgt);
+    if (applied.fov !== cur.fov) { camera.fov = mirror.fov = cur.fov; camera.updateProjectionMatrix(); mirror.updateProjectionMatrix(); applied.fov = cur.fov; }
+    camera.updateMatrixWorld();
+    sky.position.copy(camera.position);
+
+    // light, sky, swarm uniforms
+    sun.position.copy(templeC).addScaledVector(cur.S, 220); sun.target.position.copy(templeC); sun.target.updateMatrixWorld();
+    sun.intensity = cur.sunI; hemi.intensity = cur.hemiI;
+    skyMat.uniforms.uZen.value = cur.zen; skyMat.uniforms.uHor.value = cur.hor; skyMat.uniforms.uGlow.value = cur.glow; skyMat.uniforms.uSun.value.copy(cur.S);
+    const pu = ptsMat.uniforms;
+    pu.uLum.value = cur.dLum; pu.uSize.value = cur.dSize; pu.uMin.value = cur.dMin * PR; pu.uMax.value = cur.dMax * PR; pu.uShadeMix.value = cur.shadeMix; pu.uTime.value = simT;
+    pu.uScale.value = RH / (2 * Math.tan(camera.fov * Math.PI / 360));
+    const wu = waterMat.uniforms;
+    wu.uTime.value = simT; wu.uDeep.value = cur.deep; wu.uHorL.value = cur.hor; wu.uRefl.value = cur.refl; wu.uRight.value.set(Rv.x, Rv.z);
+    if (shadowDirty) { renderer.shadowMap.needsUpdate = true; shadowDirty = false; }
+
+    // planar reflection for the sea
+    if (cur.refl > .01) {
+      mirror.position.set(camera.position.x, -camera.position.y, camera.position.z);
+      mirror.up.copy(UP); mirror.lookAt(tgt.x, -tgt.y, tgt.z); mirror.updateMatrixWorld();
+      water.visible = false; renderer.clippingPlanes = [clip];
+      renderer.setRenderTarget(reflRT); renderer.render(scene, mirror);
+      renderer.clippingPlanes = []; water.visible = true;
+    }
+    renderer.setRenderTarget(rt); renderer.render(scene, camera);
+
+    const u = post.uniforms;
+    u.uProjInv.value.copy(camera.projectionMatrixInverse); u.uCamWorld.value.copy(camera.matrixWorld); u.uCamPos.value.copy(camera.position);
+    if (!reduced) u.uTime.value = now / 1000;
+    u.uGrain.value = cur.grain; u.uStip.value = cur.stip; u.uFogA.value = cur.fogA; u.uFogB.value = cur.fogB; u.uFogL.value = cur.fogL; u.uFogBase.value = cur.fogBase;
+    u.uExpo.value = cur.expo; u.uCon.value = cur.con; u.uGam.value = cur.gam; u.uVig.value = cur.vig;
+    renderer.setRenderTarget(null); renderer.render(postScene, postCam);
+    frameI++;
+  }
+  function wake() { if (!raf && !paused && near.size) { last = performance.now(); raf = requestAnimationFrame(frame); } }
+
+  canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); paused = true; document.documentElement.classList.add('no-webgl'); });
+
+  resize(true);
+  setScene(0, true);
+  wForm = 0;
+  // settle the flock before the first frame so it already looks alive
+  for (let i = 0; i < 90; i++) updateSwarm(1 / 30, i / 30, 0);
+  simT = 3;
+  render(performance.now());
+  wake();
+
+  return {
+    get paused() { return paused; },
+    setPaused(p) { paused = p; if (!p) wake(); },
+    knockOut, restore,
+    get frames() { return frameI; },
+    debug: () => {
+      const pr = (x, y, z) => { const v = new T.Vector3(x, y, z).project(camera); return [Math.round((v.x + 1) / 2 * W), Math.round((1 - v.y) / 2 * H), +v.z.toFixed(3)]; };
+      let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9, n = 0, sx = 0, sy = 0;
+      for (let i = 0; i < N; i++) { if (!alive[i]) continue; const q = pr(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); if (q[2] > 1) continue; n++; sx += q[0]; sy += q[1]; minx = Math.min(minx, q[0]); maxx = Math.max(maxx, q[0]); miny = Math.min(miny, q[1]); maxy = Math.max(maxy, q[1]); }
+      return { form, wForm: +wForm.toFixed(2), active, simT: +simT.toFixed(1), frames: frameI,
+        cam: camera.position.toArray().map(v => +v.toFixed(1)),
+        templeTop: pr(0, PY + 16.5, 0), templeL: pr(-24, PY + 12, 11), templeR: pr(24, PY + 12, -11), templeL2: pr(-24, PY + 12, -11), templeR2: pr(24, PY + 12, 11), templeBase: pr(0, PY, 0),
+        flock: pr(FLOCK.c.x, FLOCK.c.y, FLOCK.c.z), sphere: pr(SPH.c.x, SPH.c.y, SPH.c.z), lattice: pr(LAT.c.x, 12, LAT.c.z), cloud: pr(CLOUD.c.x, CLOUD.base + 35, CLOUD.c.z),
+        walker: pr(walker.position.x, walker.position.y + .9, walker.position.z), deer0: pr(deer0.position.x, deer0.position.y + .7, deer0.position.z),
+        wader: pr(wader.position.x, wader.position.y + 1.2, wader.position.z), deer3: pr(deer3.position.x, deer3.position.y + .7, deer3.position.z),
+        drones: { n, cx: Math.round(sx / n), cy: Math.round(sy / n), minx, maxx, miny, maxy } };
+    }
+  };
+}
+
+/* pause / sphere controls */
+const pauseBtn = $('#pause-btn');
+if (world) {
+  pauseBtn.addEventListener('click', () => {
+    const p = !world.paused; world.setPaused(p);
+    pauseBtn.setAttribute('aria-pressed', String(p)); pauseBtn.textContent = p ? 'Resume motion' : 'Pause motion';
+  });
+  $('#knock-btn').addEventListener('click', () => world.knockOut());
+  $('#restore-btn').addEventListener('click', () => world.restore());
+} else {
+  pauseBtn.hidden = true;
+  $$('#knock-btn, #restore-btn').forEach(b => { b.disabled = true; });
+}
+
+/* ================================================================
+   SWARM LAB: scripted fleet vs. swarm on local rules
+   ================================================================ */
+(function lab() {
+  const cA = $('#lab-a'), cB = $('#lab-b');
+  if (!cA || !cB) return;
+  const stA = $('#st-a'), stB = $('#st-b'), cutBtn = $('#lab-cut'), resetBtn = $('#lab-reset');
+  const prm = { sep: 1.6, ali: 1.0, coh: .9, k: 7 };
+  [['sep', 'p-sep', 'o-sep', 1], ['ali', 'p-ali', 'o-ali', 1], ['coh', 'p-coh', 'o-coh', 1], ['k', 'p-k', 'o-k', 0]].forEach(([key, id, out, dec]) => {
+    const inp = document.getElementById(id), o = document.getElementById(out);
+    inp.addEventListener('input', () => { prm[key] = +inp.value; o.textContent = dec ? (+inp.value).toFixed(1) : inp.value; });
+  });
+  let link = true, cutAt = 0, clock = 0;
+  const NN = 40;
+  const COL = { bg: '#06004a', grid: 'rgba(246,247,253,.05)', ink: '#f6f7fd', mist: '#b9b9e0', dim: 'rgba(246,247,253,.32)' };
+
+  function pane(cv, kind) {
+    const ctx = cv.getContext('2d');
+    let w = 0, h = 0, toast = 0;
+    const ds = Array.from({ length: NN }, () => ({ x: 0, y: 0, vx: 0, vy: 0, landed: false }));
+    const obj = { x: .64, y: .38 };
+    function size() {
+      const r = cv.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
+      if (r.width < 2) return;
+      const nw = r.width, nh = r.height;
+      if (nw === w && nh === h) return;
+      const fresh = !w; w = nw; h = nh;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      if (fresh) reset();
+    }
+    function reset() {
+      ds.forEach(d => { d.x = w * .5 + (Math.random() - .5) * 70; d.y = h - 24 - Math.random() * 16; d.vx = (Math.random() - .5) * 30; d.vy = -50 - Math.random() * 50; d.landed = false; });
+      obj.x = .64; obj.y = .38;
+    }
+    cv.addEventListener('pointerdown', e => {
+      const r = cv.getBoundingClientRect();
+      if (!link) { toast = 2.4; return; }
+      obj.x = clamp((e.clientX - r.left) / r.width, .08, .92); obj.y = clamp((e.clientY - r.top) / r.height, .1, .78);
+    });
+    function step(dt) {
+      if (!w) return;
+      toast = Math.max(0, toast - dt);
+      const ox = obj.x * w, oy = obj.y * h, base = Math.min(w, h) * .12;
+      if (kind === 'a') {
+        const since = clock - cutAt;
+        ds.forEach((d, i) => {
+          if (link) {
+            d.landed = false;
+            const inner = i < 14, n = inner ? 14 : NN - 14, idx = inner ? i : i - 14;
+            const ang = idx / n * Math.PI * 2 + clock * (inner ? .35 : -.22);
+            const rr = base * (inner ? .8 : 1.6);
+            const tx = ox + Math.cos(ang) * rr, ty = oy + Math.sin(ang) * rr * .78;
+            d.vx += ((tx - d.x) * 6 - d.vx * 3.4) * dt; d.vy += ((ty - d.y) * 6 - d.vy * 3.4) * dt;
+          } else if (since < 1.3) { d.vx *= .9; d.vy *= .9; }
+          else if (!d.landed) {
+            d.vx *= .95; d.vy = Math.min(d.vy + 60 * dt, 46);
+            if (d.y >= h - 34) { d.y = h - 34; d.vx = d.vy = 0; d.landed = true; }
+          }
+          d.x += d.vx * dt; d.y += d.vy * dt;
+        });
+      } else {
+        const k = Math.max(1, Math.round(prm.k));
+        ds.forEach((d, i) => {
+          const nb = ds.map((o, j) => j === i ? null : { o, d2: (o.x - d.x) ** 2 + (o.y - d.y) ** 2 }).filter(Boolean).sort((a, b) => a.d2 - b.d2).slice(0, k);
+          let sx = 0, sy = 0, ax = 0, ay = 0, cx = 0, cy = 0;
+          nb.forEach(({ o, d2 }) => { if (d2 < 1600) { sx += (d.x - o.x) / (d2 + 1) * 46; sy += (d.y - o.y) / (d2 + 1) * 46; } ax += o.vx; ay += o.vy; cx += o.x; cy += o.y; });
+          const n = nb.length || 1;
+          let fx = sx * prm.sep * 2.2 + (ax / n - d.vx) * prm.ali * .9 + (cx / n - d.x) * prm.coh * .6;
+          let fy = sy * prm.sep * 2.2 + (ay / n - d.vy) * prm.ali * .9 + (cy / n - d.y) * prm.coh * .6;
+          const gx = ox - d.x, gy = oy - d.y, gd = Math.hypot(gx, gy) + .01;
+          if (gd > base * 1.4) { fx += gx / gd * 70; fy += gy / gd * 70; }
+          else { fx += (-gy / gd) * 60 + gx / gd * (gd - base) * .8; fy += (gx / gd) * 60 + gy / gd * (gd - base) * .8; }
+          if (d.x < 14) fx += 140; if (d.x > w - 14) fx -= 140; if (d.y < 14) fy += 140; if (d.y > h - 30) fy -= 160;
+          d.vx += fx * dt; d.vy += fy * dt;
+          const s = Math.hypot(d.vx, d.vy), mx = 130, mn = 40;
+          if (s > mx) { d.vx *= mx / s; d.vy *= mx / s; } else if (s < mn && s > 0) { d.vx *= mn / s; d.vy *= mn / s; }
+        });
+        ds.forEach(d => { d.x += d.vx * dt; d.y += d.vy * dt; });
+      }
+    }
+    function cross(x, y, s, a) { ctx.globalAlpha = a; ctx.beginPath(); ctx.moveTo(x - s, y - s); ctx.lineTo(x + s, y + s); ctx.moveTo(x + s, y - s); ctx.lineTo(x - s, y + s); ctx.stroke(); }
+    function draw() {
+      if (!w) return;
+      ctx.globalAlpha = 1; ctx.fillStyle = COL.bg; ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = COL.grid; ctx.lineWidth = 1; ctx.beginPath();
+      for (let x = 20; x < w; x += 40) { ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, h); }
+      for (let y = 20; y < h; y += 40) { ctx.moveTo(0, y + .5); ctx.lineTo(w, y + .5); }
+      ctx.stroke();
+      const ox = obj.x * w, oy = obj.y * h, st = { x: w / 2, y: h - 10 };
+      // links
+      ctx.strokeStyle = COL.ink; ctx.lineWidth = 1;
+      if (kind === 'a') {
+        if (link) { ctx.globalAlpha = .12; ctx.beginPath(); ds.forEach(d => { ctx.moveTo(st.x, st.y - 10); ctx.lineTo(d.x, d.y); }); ctx.stroke(); }
+      } else {
+        ctx.globalAlpha = .18; ctx.beginPath();
+        ds.forEach((d, i) => {
+          let b1 = -1, b2 = -1, d1 = 1e9, d2 = 1e9;
+          ds.forEach((o, j) => { if (j === i) return; const q = (o.x - d.x) ** 2 + (o.y - d.y) ** 2; if (q < d1) { d2 = d1; b2 = b1; d1 = q; b1 = j; } else if (q < d2) { d2 = q; b2 = j; } });
+          if (b1 >= 0) { ctx.moveTo(d.x, d.y); ctx.lineTo(ds[b1].x, ds[b1].y); }
+          if (b2 >= 0) { ctx.moveTo(d.x, d.y); ctx.lineTo(ds[b2].x, ds[b2].y); }
+        });
+        ctx.stroke();
+        if (link) {
+          let gi = 0, gd = 1e9; ds.forEach((d, i) => { const q = (d.x - st.x) ** 2 + (d.y - st.y) ** 2; if (q < gd) { gd = q; gi = i; } });
+          ctx.globalAlpha = .55; ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(st.x, st.y - 10); ctx.lineTo(ds[gi].x, ds[gi].y); ctx.stroke(); ctx.setLineDash([]);
+        }
+      }
+      // objective
+      ctx.globalAlpha = .9; ctx.strokeStyle = COL.mist; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(ox, oy, 9, 0, Math.PI * 2); ctx.moveTo(ox - 16, oy); ctx.lineTo(ox - 5, oy); ctx.moveTo(ox + 5, oy); ctx.lineTo(ox + 16, oy); ctx.moveTo(ox, oy - 16); ctx.lineTo(ox, oy - 5); ctx.moveTo(ox, oy + 5); ctx.lineTo(ox, oy + 16); ctx.stroke();
+      ctx.font = '500 9px "IBM Plex Mono", ui-monospace, monospace'; ctx.fillStyle = COL.mist; ctx.textAlign = 'left';
+      ctx.fillText(link ? 'OBJECTIVE' : 'LAST APPROVED', ox + 14, oy - 12);
+      // operator station (a small pediment)
+      ctx.globalAlpha = 1; ctx.fillStyle = COL.ink;
+      ctx.beginPath(); ctx.moveTo(st.x - 9, st.y); ctx.lineTo(st.x, st.y - 11); ctx.lineTo(st.x + 9, st.y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = COL.mist; ctx.textAlign = 'right'; ctx.fillText(link ? 'OPERATOR' : 'OPERATOR · LINK CUT', st.x - 16, st.y - 1);
+      if (!link) { ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.6; cross(st.x + 18, st.y - 5, 4, .9); }
+      // drones
+      ctx.strokeStyle = COL.ink; ctx.lineWidth = 1.6;
+      ds.forEach(d => cross(d.x, d.y, 3.2, d.landed ? .35 : 1));
+      ctx.globalAlpha = 1;
+      if (toast > 0) {
+        ctx.globalAlpha = Math.min(1, toast); ctx.fillStyle = 'rgba(246,247,253,.94)';
+        const msg = 'Link down: new orders cannot reach the drones';
+        ctx.font = '500 10px "IBM Plex Mono", ui-monospace, monospace';
+        const tw = ctx.measureText(msg).width + 20; ctx.fillRect(w / 2 - tw / 2, 12, tw, 24);
+        ctx.fillStyle = COL.bg; ctx.textAlign = 'center'; ctx.fillText(msg, w / 2, 28); ctx.globalAlpha = 1;
+      }
+    }
+    return { size, reset, step, draw, ds };
+  }
+  const A = pane(cA, 'a'), B = pane(cB, 'b');
+  function status() {
+    if (link) { stA.textContent = 'Link OK · flying the script'; stB.textContent = 'Link OK · orbiting objective'; stA.classList.remove('alert'); stB.classList.remove('alert'); return; }
+    const landed = A.ds.filter(d => d.landed).length;
+    stA.textContent = clock - cutAt < 1.3 ? 'Link lost · holding' : landed === NN ? 'Link lost · fleet grounded' : 'Link lost · landing';
+    stB.textContent = 'Link lost · last approved task · no new engagement';
+    stA.classList.add('alert'); stB.classList.add('alert');
+  }
+  cutBtn.addEventListener('click', () => {
+    link = !link; if (!link) cutAt = clock;
+    cutBtn.setAttribute('aria-pressed', String(!link)); cutBtn.textContent = link ? 'Cut the link' : 'Restore the link';
+    status();
+  });
+  resetBtn.addEventListener('click', () => { link = true; cutBtn.setAttribute('aria-pressed', 'false'); cutBtn.textContent = 'Cut the link'; A.reset(); B.reset(); status(); });
+
+  let vis = false, raf = 0, last = 0, st = 0;
+  function loop(now) {
+    raf = vis ? requestAnimationFrame(loop) : 0;
+    const dt = Math.min((now - last) / 1000, 1 / 24) * (reduced ? .5 : 1); last = now; clock += dt;
+    A.size(); B.size(); A.step(dt); B.step(dt); A.draw(); B.draw();
+    if (now - st > 250) { st = now; status(); }
+  }
+  new IntersectionObserver(es => { vis = es.some(e => e.isIntersecting); if (vis && !raf) { last = performance.now(); raf = requestAnimationFrame(loop); } }, { rootMargin: '100px' }).observe($('#lab'));
+  A.size(); B.size(); A.draw(); B.draw();
+  addEventListener('resize', () => { A.size(); B.size(); A.draw(); B.draw(); });
+})();
+
+})();
+</script>
+</body>
+</html>
